@@ -1,0 +1,31 @@
+# Build output.
+# Anchored to the repository root so these do not also match the cmd/soroforge
+# source directory.
+/bin/
+/dist/
+/soroforge
+/soroforge.exe
+
+# Local secrets and environment — never commit these
+.env
+.env.local
+*.pem
+*.key
+keystore
+keystore.json
+
+# Contract artifacts
+*.wasm
+
+# Go
+vendor/
+*.test
+*.out
+coverage.*
+
+# Editors / OS / local tooling
+.DS_Store
+.idea/
+.vscode/
+.claude/
+*.swp

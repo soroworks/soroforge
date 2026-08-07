@@ -1,0 +1,76 @@
+# SoroForge project configuration.
+#
+# This file describes what is stable and shareable — the networks your team
+# deploys to and the contracts it manages — and belongs in version control.
+#
+# Secrets never go here. The deployer key and database URL come from the
+# environment; see .env.example.
+
+version: 1
+
+# Used when a command omits --network. Naming it explicitly means a deploy
+# cannot land on the wrong network because of an implicit default.
+default_network: testnet
+
+networks:
+  testnet:
+    rpc_url: https://soroban-testnet.stellar.org
+    # The passphrase is mixed into every signature, so it is required rather
+    # than inferred from the network name. A wrong value produces a transaction
+    # that is invalid on the network you meant to use.
+    passphrase: "Test SDF Network ; September 2015"
+
+  # There is no public SDF-hosted mainnet RPC. Point this at a provider you
+  # trust, or at your own node.
+  mainnet:
+    rpc_url: https://mainnet.sorobanrpc.com
+    passphrase: "Public Global Stellar Network ; September 2015"
+
+  # Any number of extra networks work the same way — a local quickstart node,
+  # a staging chain, or a futurenet endpoint.
+  local:
+    rpc_url: http://localhost:8000/soroban/rpc
+    passphrase: "Standalone Network ; February 2017"
+
+contracts:
+  # The alias is how you refer to a contract everywhere: on the command line,
+  # in the HTTP API, and in the deployment history.
+  counter:
+    # Relative paths resolve against this file's directory, not your shell's
+    # working directory.
+    wasm: ./target/wasm32-unknown-unknown/release/counter.wasm
+
+  token:
+    wasm: ./target/wasm32-unknown-unknown/release/token.wasm
+
+    # Arguments passed to the contract's constructor at instantiation.
+    # Supported types: bool, void, u32, i32, u64, i64, u128, i128, string,
+    # symbol, bytes (hex), address (G... or C...), vec, map, and xdr.
+    constructor_args:
+      - {type: address, value: GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF}
+      - {type: u32, value: 7}
+      - {type: string, value: "Example Token"}
+
+      # Values beyond float64's exact range must be quoted, or YAML will round
+      # them before SoroForge ever sees them.
+      # - {type: i128, value: "170141183460469231731687303715884105727"}
+
+      # Nested values work too:
+      # - {type: vec, value: [{type: u32, value: 1}, {type: u32, value: 2}]}
+      # - {type: map, value: [{key: {type: symbol, value: decimals},
+      #                        value: {type: u32, value: 7}}]}
+
+      # Escape hatch: pass a pre-encoded base64 ScVal for anything the typed
+      # forms above do not cover.
+      # - {type: xdr, value: "AAAAAwAAAAc="}
+
+    # Soroban has no protocol-level upgrade operation — a contract upgrades
+    # itself through a function it exposes. Defaults to "upgrade"; set this if
+    # your contract names it something else.
+    upgrade_fn: upgrade
+
+    # Contract addresses are derived from (deployer address, salt). Setting a
+    # fixed 32-byte hex salt makes the address reproducible; leaving it unset
+    # generates a random salt per deploy, so deploying twice yields two
+    # distinct contracts rather than a collision.
+    # salt: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"

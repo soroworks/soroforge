@@ -1,0 +1,245 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// Postgres is the production Store, backed by pgx v5.
+type Postgres struct {
+	pool *pgxpool.Pool
+}
+
+var _ Store = (*Postgres)(nil)
+
+// connectTimeout bounds the initial connection so a wrong DATABASE_URL fails
+// promptly instead of hanging a CI job.
+const connectTimeout = 10 * time.Second
+
+// NewPostgres connects to Postgres and verifies the connection.
+//
+// It pings eagerly: a pool is lazy by default, and discovering a bad connection
+// string only after a deploy transaction has been submitted on-chain would be a
+// bad time to find out the history cannot be written.
+func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
+	if databaseURL == "" {
+		return nil, fmt.Errorf("store: database URL is required")
+	}
+
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		// pgx echoes the connection string in parse errors, and that string
+		// normally carries a password. Report the failure without it.
+		return nil, fmt.Errorf("store: could not parse %s (check its format)", "DATABASE_URL")
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("store: connect: %w", err)
+	}
+
+	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("store: ping: %w", err)
+	}
+
+	return &Postgres{pool: pool}, nil
+}
+
+// Close releases the connection pool.
+func (p *Postgres) Close() error {
+	p.pool.Close()
+	return nil
+}
+
+// Pool exposes the underlying pool for migrations and integration tests.
+func (p *Postgres) Pool() *pgxpool.Pool { return p.pool }
+
+const upsertContractSQL = `
+INSERT INTO contracts (alias, network, contract_id, current_wasm_hash)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (network, alias) DO UPDATE
+SET contract_id       = EXCLUDED.contract_id,
+    current_wasm_hash = EXCLUDED.current_wasm_hash,
+    updated_at        = now()
+RETURNING id, alias, network, contract_id, current_wasm_hash, created_at, updated_at`
+
+// UpsertContract implements Store.
+func (p *Postgres) UpsertContract(ctx context.Context, c Contract) (Contract, error) {
+	if err := c.Validate(); err != nil {
+		return Contract{}, err
+	}
+	row := p.pool.QueryRow(ctx, upsertContractSQL, c.Alias, c.Network, c.ContractID, c.CurrentWasmHash)
+	out, err := scanContract(row)
+	if err != nil {
+		return Contract{}, fmt.Errorf("upsert contract %s/%s: %w", c.Network, c.Alias, err)
+	}
+	return out, nil
+}
+
+const getContractSQL = `
+SELECT id, alias, network, contract_id, current_wasm_hash, created_at, updated_at
+FROM contracts
+WHERE network = $1 AND alias = $2`
+
+// GetContract implements Store.
+func (p *Postgres) GetContract(ctx context.Context, network, alias string) (Contract, error) {
+	row := p.pool.QueryRow(ctx, getContractSQL, network, alias)
+	c, err := scanContract(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Contract{}, fmt.Errorf("contract %s on %s: %w", alias, network, ErrNotFound)
+	}
+	if err != nil {
+		return Contract{}, fmt.Errorf("get contract %s/%s: %w", network, alias, err)
+	}
+	return c, nil
+}
+
+const listContractsSQL = `
+SELECT id, alias, network, contract_id, current_wasm_hash, created_at, updated_at
+FROM contracts
+WHERE ($1 = '' OR network = $1)
+ORDER BY network, alias`
+
+// ListContracts implements Store.
+func (p *Postgres) ListContracts(ctx context.Context, network string) ([]Contract, error) {
+	rows, err := p.pool.Query(ctx, listContractsSQL, network)
+	if err != nil {
+		return nil, fmt.Errorf("list contracts: %w", err)
+	}
+	defer rows.Close()
+
+	contracts := []Contract{}
+	for rows.Next() {
+		c, err := scanContract(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list contracts: %w", err)
+		}
+		contracts = append(contracts, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list contracts: %w", err)
+	}
+	return contracts, nil
+}
+
+const recordDeploymentSQL = `
+INSERT INTO deployments (
+    alias, network, contract_id, wasm_hash, action, deployer_pubkey, tx_hash, ledger, notes
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, alias, network, contract_id, wasm_hash, action,
+          deployer_pubkey, tx_hash, ledger, notes, created_at`
+
+// RecordDeployment implements Store.
+func (p *Postgres) RecordDeployment(ctx context.Context, d Deployment) (Deployment, error) {
+	if err := d.Validate(); err != nil {
+		return Deployment{}, err
+	}
+
+	// tx_hash and ledger are absent for a dry run and unknown if submission
+	// fails after signing; NULL records that honestly rather than storing a
+	// misleading empty string or a zero ledger.
+	var txHash *string
+	if d.TxHash != "" {
+		txHash = &d.TxHash
+	}
+	var ledger *int64
+	if d.Ledger != 0 {
+		l := int64(d.Ledger)
+		ledger = &l
+	}
+	var notes *string
+	if d.Notes != "" {
+		notes = &d.Notes
+	}
+
+	row := p.pool.QueryRow(ctx, recordDeploymentSQL,
+		d.Alias, d.Network, d.ContractID, d.WasmHash, string(d.Action),
+		d.DeployerPubkey, txHash, ledger, notes)
+
+	out, err := scanDeployment(row)
+	if err != nil {
+		return Deployment{}, fmt.Errorf("record deployment for %s/%s: %w", d.Network, d.Alias, err)
+	}
+	return out, nil
+}
+
+const historySQL = `
+SELECT id, alias, network, contract_id, wasm_hash, action,
+       deployer_pubkey, tx_hash, ledger, notes, created_at
+FROM deployments
+WHERE network = $1 AND alias = $2
+ORDER BY created_at DESC, id DESC`
+
+// History implements Store.
+//
+// It orders by created_at then id so that records written within the same clock
+// tick still come back in insertion order — an upgrade must never appear to
+// precede the deploy it followed.
+func (p *Postgres) History(ctx context.Context, network, alias string) ([]Deployment, error) {
+	rows, err := p.pool.Query(ctx, historySQL, network, alias)
+	if err != nil {
+		return nil, fmt.Errorf("history for %s/%s: %w", network, alias, err)
+	}
+	defer rows.Close()
+
+	deployments := []Deployment{}
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("history for %s/%s: %w", network, alias, err)
+		}
+		deployments = append(deployments, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("history for %s/%s: %w", network, alias, err)
+	}
+	return deployments, nil
+}
+
+// scanner is satisfied by both pgx.Row and pgx.Rows, so the column lists below
+// are written once rather than duplicated for single-row and multi-row reads.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanContract(s scanner) (Contract, error) {
+	var c Contract
+	err := s.Scan(&c.ID, &c.Alias, &c.Network, &c.ContractID, &c.CurrentWasmHash, &c.CreatedAt, &c.UpdatedAt)
+	return c, err
+}
+
+func scanDeployment(s scanner) (Deployment, error) {
+	var (
+		d      Deployment
+		action string
+		txHash *string
+		ledger *int64
+		notes  *string
+	)
+	err := s.Scan(&d.ID, &d.Alias, &d.Network, &d.ContractID, &d.WasmHash, &action,
+		&d.DeployerPubkey, &txHash, &ledger, &notes, &d.CreatedAt)
+	if err != nil {
+		return Deployment{}, err
+	}
+
+	d.Action = Action(action)
+	if txHash != nil {
+		d.TxHash = *txHash
+	}
+	if ledger != nil {
+		d.Ledger = uint32(*ledger)
+	}
+	if notes != nil {
+		d.Notes = *notes
+	}
+	return d, nil
+}

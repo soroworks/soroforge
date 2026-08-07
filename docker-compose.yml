@@ -1,0 +1,33 @@
+# Postgres for local development and for the opt-in integration tests.
+#
+#   docker compose up -d
+#   make migrate-up
+#
+# This is a development convenience, not a production deployment: the
+# credentials are well known and the database is reachable on localhost.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: soroforge-postgres
+    environment:
+      POSTGRES_USER: soroforge
+      POSTGRES_PASSWORD: soroforge
+      POSTGRES_DB: soroforge
+    ports:
+      # Bound to loopback so the database is not exposed to the local network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - soroforge-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `make migrate-up` immediately after `up -d` otherwise races the
+      # database's own startup.
+      test: ["CMD-SHELL", "pg_isready -U soroforge -d soroforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  soroforge-pgdata:
