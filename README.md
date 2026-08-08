@@ -6,6 +6,12 @@ SoroForge turns contract deployment into a tracked, repeatable workflow with a
 recorded history — so you manage contracts the way you manage any other deployed
 software.
 
+> **Independent project.** SoroForge is an independent, community-built tool. It
+> is not affiliated with, endorsed by, or supported by the Stellar Development
+> Foundation. "Stellar" and "Soroban" are used only to describe what this tool
+> works with. For official tooling, see the
+> [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools).
+
 ---
 
 ## Why
