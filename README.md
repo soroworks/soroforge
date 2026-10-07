@@ -113,14 +113,24 @@ docker compose up -d
 make migrate-up
 ```
 
-**2. Configure your project.** Edit `soroforge.yaml` so a contract alias points
-at your compiled artifact:
+**2. Configure your project.** From your contract project, after
+`stellar contract build`:
+
+```bash
+soroforge init
+```
+
+`init` finds the release WASM under `target/wasm32v1-none/release` (or the
+older `wasm32-unknown-unknown`), preferring a `.optimized.wasm`, and writes a
+`soroforge.yaml` with one alias per contract, targeting testnet:
 
 ```yaml
 contracts:
   counter:
-    wasm: ./target/wasm32-unknown-unknown/release/counter.wasm
+    wasm: "./target/wasm32v1-none/release/counter.wasm"
 ```
+
+It never replaces an existing file without `--force`.
 
 **3. Provide credentials.**
 
@@ -266,6 +276,7 @@ Output goes to stdout and logs to stderr, so `--json` output stays pipeable.
 
 | Command | Description |
 |---|---|
+| `init` | Write a starter `soroforge.yaml` for the contracts built under `target/`. |
 | `deploy <alias>` | Upload WASM, instantiate the contract, record it. |
 | `upgrade <alias>` | Upload new WASM and invoke the contract's upgrade entrypoint. |
 | `list` | List tracked contracts; `--network` filters. |

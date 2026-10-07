@@ -59,6 +59,7 @@ The secret key is never logged, stored, or printed. See the README security note
 		"emit machine-readable JSON instead of human-readable text")
 
 	cmd.AddCommand(
+		newInitCmd(),
 		newDeployCmd(),
 		newUpgradeCmd(),
 		newListCmd(),
