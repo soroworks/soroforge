@@ -1,5 +1,11 @@
 # SoroForge
 
+[![CI](https://github.com/soroworks/soroforge/actions/workflows/ci.yml/badge.svg)](https://github.com/soroworks/soroforge/actions/workflows/ci.yml)
+[![Security](https://github.com/soroworks/soroforge/actions/workflows/security.yml/badge.svg)](https://github.com/soroworks/soroforge/actions/workflows/security.yml)
+[![Release](https://img.shields.io/github/v/release/soroworks/soroforge)](https://github.com/soroworks/soroforge/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/soroworks/soroforge)](go.mod)
+[![License](https://img.shields.io/github/license/soroworks/soroforge)](LICENSE)
+
 Deployment and lifecycle management for Stellar/Soroban smart contracts.
 
 SoroForge turns contract deployment into a tracked, repeatable workflow with a
