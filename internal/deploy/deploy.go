@@ -56,6 +56,10 @@ type DeployResult struct {
 
 	// Deployment is the recorded history entry, absent on a dry run.
 	Deployment *store.Deployment `json:"deployment,omitempty"`
+
+	// Catalog reports registration with the network's sorovault_url. Absent
+	// on a dry run or when no registry is configured.
+	Catalog *CatalogStatus `json:"catalog,omitempty"`
 }
 
 // Deploy uploads a contract's bytecode and instantiates it, then records the
@@ -175,6 +179,7 @@ func (s *Service) Deploy(ctx context.Context, req DeployRequest) (*DeployResult,
 		return nil, err
 	}
 	result.Deployment = deployment
+	result.Catalog = s.publish(ctx, r, contractID, log)
 
 	return result, nil
 }

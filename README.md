@@ -172,6 +172,7 @@ networks:
   testnet:
     rpc_url: https://soroban-testnet.stellar.org
     passphrase: "Test SDF Network ; September 2015"
+    sorovault_url: http://localhost:8080   # optional
 
 contracts:
   counter:
@@ -188,6 +189,16 @@ silently defaulted one could sign a mainnet deploy with testnet assumptions.
 
 There is **no public SDF-hosted mainnet RPC**. Point `mainnet` at a provider you
 trust or at your own node.
+
+**`sorovault_url`** registers every confirmed deploy and upgrade with a
+[SoroVault](https://github.com/soroworks/sorovault) registry serving that
+network, so the contract's functions, types and events are discoverable the
+moment it is live — and [SoroProbe](https://github.com/soroworks/soroprobe)
+can type its arguments from them. An upgrade records a new interface version
+and keeps the old one. Registration happens only after on-chain confirmation
+and is best-effort: if SoroVault is down, the deploy still succeeds and is
+recorded, and the output (`catalog` in JSON) says registration failed so you
+can run `sorovault add` later. Dry runs never register anything.
 
 **Contracts.** `wasm` paths resolve against the config file's directory, not your
 shell's working directory, so `soroforge deploy` behaves the same from anywhere.
@@ -373,6 +384,7 @@ internal/stellar/   RPC client, transaction assembly, signing (all interfaced)
 internal/deploy/    deploy/upgrade/status orchestration
 internal/store/     Postgres history + embedded migrations
 internal/api/       chi HTTP handlers mirroring the CLI
+internal/catalog/   best-effort registration with SoroVault after a deploy
 ```
 
 Three interfaces are the seams: `stellar.Client` (RPC), `stellar.Signer`

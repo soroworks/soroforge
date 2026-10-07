@@ -16,6 +16,7 @@ networks:
   testnet:
     rpc_url: https://soroban-testnet.stellar.org
     passphrase: "Test SDF Network ; September 2015"
+    sorovault_url: http://localhost:8080
   mainnet:
     rpc_url: https://mainnet.example.org
     passphrase: "Public Global Stellar Network ; September 2015"
@@ -46,6 +47,8 @@ func TestLoadValidConfig(t *testing.T) {
 	assert.Equal(t, "testnet", cfg.DefaultNetwork)
 	assert.Len(t, cfg.Networks, 2)
 	assert.Len(t, cfg.Contracts, 2)
+	assert.Equal(t, "http://localhost:8080", cfg.Networks["testnet"].SoroVaultURL)
+	assert.Empty(t, cfg.Networks["mainnet"].SoroVaultURL, "the registry is optional per network")
 }
 
 func TestNetworkLookupFallsBackToDefault(t *testing.T) {
@@ -212,6 +215,20 @@ contracts:
   counter: {wasm: ./c.wasm}
 `,
 			wantErr: "missing host",
+		},
+		"sorovault url without scheme": {
+			config: `
+version: 1
+default_network: testnet
+networks:
+  testnet:
+    rpc_url: https://rpc.example.org
+    passphrase: "Test SDF Network ; September 2015"
+    sorovault_url: localhost:8080
+contracts:
+  counter: {wasm: ./c.wasm}
+`,
+			wantErr: "networks.testnet.sorovault_url",
 		},
 		"contract without wasm": {
 			config: `

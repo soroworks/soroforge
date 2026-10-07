@@ -19,6 +19,11 @@ networks:
     # than inferred from the network name. A wrong value produces a transaction
     # that is invalid on the network you meant to use.
     passphrase: "Test SDF Network ; September 2015"
+    # Optional: register every confirmed deploy and upgrade with a SoroVault
+    # registry serving this network, so the contract's interface is
+    # discoverable as soon as it is live. Best-effort — a registry outage
+    # never fails a deploy.
+    # sorovault_url: http://localhost:8080
 
   # There is no public SDF-hosted mainnet RPC. Point this at a provider you
   # trust, or at your own node.

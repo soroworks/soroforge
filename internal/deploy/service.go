@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/soroworks/soroforge/internal/catalog"
 	"github.com/soroworks/soroforge/internal/config"
 	"github.com/soroworks/soroforge/internal/stellar"
 	"github.com/soroworks/soroforge/internal/store"
@@ -55,6 +56,9 @@ type Service struct {
 	// confirmTimeout bounds how long to wait for a submitted transaction to
 	// reach a terminal state.
 	confirmTimeout time.Duration
+
+	// catalog publishes confirmed contracts to a network's sorovault_url.
+	catalog catalog.Registrar
 }
 
 // Options configures a Service. Config, Store, and Signer are required.
@@ -78,6 +82,11 @@ type Options struct {
 
 	// ConfirmTimeout defaults to DefaultConfirmTimeout.
 	ConfirmTimeout time.Duration
+
+	// Catalog registers confirmed deploys and upgrades with the network's
+	// sorovault_url, when one is configured. Defaults to a SoroVault HTTP
+	// client; tests replace it.
+	Catalog catalog.Registrar
 }
 
 // DefaultConfirmTimeout bounds waiting for a transaction to be included.
@@ -113,6 +122,10 @@ func New(opts Options) (*Service, error) {
 	if confirmTimeout <= 0 {
 		confirmTimeout = DefaultConfirmTimeout
 	}
+	registrar := opts.Catalog
+	if registrar == nil {
+		registrar = catalog.NewSoroVault(nil)
+	}
 
 	return &Service{
 		cfg:            opts.Config,
@@ -122,7 +135,45 @@ func New(opts Options) (*Service, error) {
 		log:            log,
 		baseFee:        baseFee,
 		confirmTimeout: confirmTimeout,
+		catalog:        registrar,
 	}, nil
+}
+
+// CatalogStatus reports what happened when a confirmed contract was
+// published to the network's interface registry.
+type CatalogStatus struct {
+	// Registry is the sorovault_url the contract was sent to.
+	Registry string `json:"registry"`
+	// OK is false when registration failed. The deploy itself still
+	// succeeded; Error says why the catalog step did not.
+	OK    bool            `json:"ok"`
+	Error string          `json:"error,omitempty"`
+	Entry *catalog.Result `json:"entry,omitempty"`
+}
+
+// publish registers a confirmed contract with the network's SoroVault, if
+// one is configured. It never returns an error: the contract is already live
+// and recorded, so a failure here is reported in the result and logged, and
+// `sorovault add` or a later deploy can catch it up.
+func (s *Service) publish(ctx context.Context, r resolved, contractID string, log *slog.Logger) *CatalogStatus {
+	if r.Network.SoroVaultURL == "" {
+		return nil
+	}
+
+	status := &CatalogStatus{Registry: r.Network.SoroVaultURL}
+	entry, err := s.catalog.Register(ctx, r.Network.SoroVaultURL, contractID)
+	if err != nil {
+		status.Error = err.Error()
+		log.Warn("contract is live but could not be registered with sorovault",
+			"contract_id", contractID, "registry", r.Network.SoroVaultURL, "error", err)
+		return status
+	}
+
+	status.OK = true
+	status.Entry = entry
+	log.Info("contract registered with sorovault",
+		"contract_id", contractID, "url", entry.URL, "functions", entry.Functions)
+	return status
 }
 
 // Config exposes the loaded configuration, for callers that need to render

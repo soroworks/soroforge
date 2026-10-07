@@ -66,6 +66,7 @@ func printDeployResult(r *deploy.DeployResult) error {
 	if r.Ledger != 0 {
 		fmt.Fprintf(w, "  Ledger        %d\n", r.Ledger)
 	}
+	printCatalog(w, r.Catalog)
 
 	if r.DryRun {
 		fmt.Fprintf(w, "\nAssembled transaction envelopes (unsigned):\n")
@@ -119,6 +120,7 @@ func printUpgradeResult(r *deploy.UpgradeResult) error {
 	if r.Ledger != 0 {
 		fmt.Fprintf(w, "  Ledger        %d\n", r.Ledger)
 	}
+	printCatalog(w, r.Catalog)
 
 	if r.DryRun && r.UpgradeEnvelopeXDR != "" {
 		fmt.Fprintf(w, "\nAssembled upgrade envelope (unsigned):\n\n  %s\n", r.UpgradeEnvelopeXDR)
@@ -126,6 +128,20 @@ func printUpgradeResult(r *deploy.UpgradeResult) error {
 	}
 
 	return nil
+}
+
+// printCatalog reports SoroVault registration. A failure is shown as a
+// warning, not an error: the deploy itself succeeded and is recorded.
+func printCatalog(w io.Writer, c *deploy.CatalogStatus) {
+	if c == nil {
+		return
+	}
+	if !c.OK {
+		fmt.Fprintf(w, "  SoroVault     not registered: %s\n", c.Error)
+		fmt.Fprintf(w, "                (the deploy succeeded; run `sorovault add` to catch up)\n")
+		return
+	}
+	fmt.Fprintf(w, "  SoroVault     %s (%d functions)\n", c.Entry.URL, c.Entry.Functions)
 }
 
 func printContracts(contracts []store.Contract) error {

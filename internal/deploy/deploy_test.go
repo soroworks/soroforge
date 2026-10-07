@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/soroworks/soroforge/internal/catalog"
 	"github.com/soroworks/soroforge/internal/config"
 	"github.com/soroworks/soroforge/internal/deploy"
 	"github.com/soroworks/soroforge/internal/stellar"
@@ -49,6 +50,9 @@ type harnessOptions struct {
 
 	// noSigner builds a read-only service.
 	noSigner bool
+
+	// catalog replaces the SoroVault registrar.
+	catalog catalog.Registrar
 }
 
 func newHarness(t *testing.T, opts harnessOptions) *harness {
@@ -104,7 +108,8 @@ contracts:
 		Signer:  signer,
 		Clients: func(string, config.Network) (stellar.Client, error) { return client, nil },
 		// Discard logs so test output stays readable.
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Catalog: opts.catalog,
 	})
 	require.NoError(t, err)
 

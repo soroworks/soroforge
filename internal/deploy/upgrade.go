@@ -50,6 +50,11 @@ type UpgradeResult struct {
 	NoChange bool `json:"no_change,omitempty"`
 
 	Deployment *store.Deployment `json:"deployment,omitempty"`
+
+	// Catalog reports registration of the new interface version with the
+	// network's sorovault_url. Absent on a dry run, on a no-change upgrade,
+	// or when no registry is configured.
+	Catalog *CatalogStatus `json:"catalog,omitempty"`
 }
 
 // Upgrade replaces a tracked contract's bytecode, keeping its address.
@@ -200,6 +205,7 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResu
 		return nil, err
 	}
 	result.Deployment = deployment
+	result.Catalog = s.publish(ctx, r, tracked.ContractID, log)
 
 	return result, nil
 }

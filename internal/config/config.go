@@ -71,6 +71,11 @@ type Network struct {
 
 	// Passphrase is the network passphrase, e.g. "Test SDF Network ; September 2015".
 	Passphrase string `yaml:"passphrase"`
+
+	// SoroVaultURL, when set, is a SoroVault registry serving this network.
+	// Every confirmed deploy and upgrade is registered there, so the
+	// contract's interface is discoverable as soon as it is live. Optional.
+	SoroVaultURL string `yaml:"sorovault_url"`
 }
 
 // Contract is a contract SoroForge manages.

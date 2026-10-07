@@ -57,6 +57,21 @@ func (c *Config) Validate() error {
 	return errors.New("\n  - " + strings.Join(problems, "\n  - "))
 }
 
+// checkHTTPURL returns a problem description when raw is not an absolute
+// http(s) URL, or "" when it is.
+func checkHTTPURL(field, raw string) string {
+	u, err := url.Parse(raw)
+	switch {
+	case err != nil:
+		return fmt.Sprintf("%s: %v", field, err)
+	case u.Scheme != "http" && u.Scheme != "https":
+		return fmt.Sprintf("%s: scheme must be http or https, got %q", field, u.Scheme)
+	case u.Host == "":
+		return field + ": missing host"
+	}
+	return ""
+}
+
 func validateNetwork(name string, n Network) []string {
 	var problems []string
 	prefix := fmt.Sprintf("networks.%s", name)
@@ -65,19 +80,15 @@ func validateNetwork(name string, n Network) []string {
 		return []string{"networks: network names must not be empty"}
 	}
 
-	switch {
-	case strings.TrimSpace(n.RPCURL) == "":
+	if strings.TrimSpace(n.RPCURL) == "" {
 		problems = append(problems, prefix+".rpc_url: must be set")
-	default:
-		u, err := url.Parse(n.RPCURL)
-		switch {
-		case err != nil:
-			problems = append(problems, fmt.Sprintf("%s.rpc_url: %v", prefix, err))
-		case u.Scheme != "http" && u.Scheme != "https":
-			problems = append(problems, fmt.Sprintf(
-				"%s.rpc_url: scheme must be http or https, got %q", prefix, u.Scheme))
-		case u.Host == "":
-			problems = append(problems, prefix+".rpc_url: missing host")
+	} else if p := checkHTTPURL(prefix+".rpc_url", n.RPCURL); p != "" {
+		problems = append(problems, p)
+	}
+
+	if n.SoroVaultURL != "" {
+		if p := checkHTTPURL(prefix+".sorovault_url", n.SoroVaultURL); p != "" {
+			problems = append(problems, p)
 		}
 	}
 
