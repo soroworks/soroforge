@@ -219,6 +219,37 @@ func printStatus(r *deploy.StatusResult) error {
 	return nil
 }
 
+func printNetworkStatus(r *deploy.NetworkStatus) error {
+	if flags.jsonOutput {
+		return printJSON(r)
+	}
+
+	w := out()
+	if len(r.Contracts) == 0 {
+		fmt.Fprintf(w, "No contracts tracked on %s.\n", r.Network)
+		return nil
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ALIAS\tSTATE\tCONTRACT ID\tRECORDED\tON-CHAIN")
+	for _, c := range r.Contracts {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+			c.Alias, c.State, c.ContractID, shortHash(c.ExpectedWasmHash), shortHash(c.ActualWasmHash))
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+
+	synced := 0
+	for _, c := range r.Contracts {
+		if c.InSync() {
+			synced++
+		}
+	}
+	fmt.Fprintf(w, "\n%d of %d contract(s) on %s in sync.\n", synced, len(r.Contracts), r.Network)
+	return nil
+}
+
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"

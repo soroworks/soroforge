@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/soroworks/soroforge/internal/stellar"
 	"github.com/soroworks/soroforge/internal/store"
@@ -91,10 +92,69 @@ func (s *Service) Status(ctx context.Context, req StatusRequest) (*StatusResult,
 		return nil, err
 	}
 
-	result.ContractID = tracked.ContractID
-	result.ExpectedWasmHash = tracked.CurrentWasmHash
+	return checkTracked(ctx, r.Client, tracked)
+}
 
-	liveHash, err := stellar.OnChainWasmHash(ctx, r.Client, tracked.ContractID)
+// NetworkStatus is a drift check over every tracked contract on a network.
+type NetworkStatus struct {
+	Network string `json:"network"`
+	// InSync is true only when every contract is in sync.
+	InSync    bool           `json:"in_sync"`
+	Contracts []StatusResult `json:"contracts"`
+}
+
+// StatusAll drift-checks every contract SoroForge tracks on a network, in
+// alias order, so one CI step can gate on all of them.
+//
+// It works from the records rather than from soroforge.yaml, for two reasons:
+// a contract whose alias was since removed from the config is still live and
+// still worth checking, and a contract declared in the config but never
+// deployed to this network is not drift — it is simply not there yet.
+func (s *Service) StatusAll(ctx context.Context, networkName string) (*NetworkStatus, error) {
+	name, network, err := s.cfg.Network(networkName)
+	if err != nil {
+		return nil, err
+	}
+
+	tracked, err := s.store.ListContracts(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &NetworkStatus{Network: name, InSync: true, Contracts: []StatusResult{}}
+	if len(tracked) == 0 {
+		return result, nil
+	}
+
+	client, err := s.clients(name, network)
+	if err != nil {
+		return nil, fmt.Errorf("connect to %s: %w", name, err)
+	}
+
+	sort.Slice(tracked, func(i, j int) bool { return tracked[i].Alias < tracked[j].Alias })
+	for _, c := range tracked {
+		status, err := checkTracked(ctx, client, c)
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", c.Alias, err)
+		}
+		result.Contracts = append(result.Contracts, *status)
+		if !status.InSync() {
+			result.InSync = false
+		}
+	}
+	return result, nil
+}
+
+// checkTracked compares one tracked contract against the ledger.
+func checkTracked(ctx context.Context, client stellar.Client, tracked store.Contract) (*StatusResult, error) {
+	result := &StatusResult{
+		Alias:            tracked.Alias,
+		Network:          tracked.Network,
+		ContractID:       tracked.ContractID,
+		ExpectedWasmHash: tracked.CurrentWasmHash,
+	}
+
+	liveHash, err := stellar.OnChainWasmHash(ctx, client, tracked.ContractID)
 	if err != nil {
 		var notFound *stellar.ErrContractNotFound
 		if errors.As(err, &notFound) {
@@ -102,7 +162,7 @@ func (s *Service) Status(ctx context.Context, req StatusRequest) (*StatusResult,
 			result.Detail = fmt.Sprintf(
 				"SoroForge records %s as deployed at %s on %s, but that contract has no instance "+
 					"on-chain (never deployed to this network, or its instance entry expired)",
-				r.Alias, tracked.ContractID, r.NetworkName)
+				tracked.Alias, tracked.ContractID, tracked.Network)
 			return result, nil
 		}
 		return nil, err
@@ -112,7 +172,7 @@ func (s *Service) Status(ctx context.Context, req StatusRequest) (*StatusResult,
 
 	if result.ActualWasmHash == result.ExpectedWasmHash {
 		result.State = StateInSync
-		result.Detail = fmt.Sprintf("%s on %s matches its recorded wasm hash", r.Alias, r.NetworkName)
+		result.Detail = fmt.Sprintf("%s on %s matches its recorded wasm hash", tracked.Alias, tracked.Network)
 		return result, nil
 	}
 
@@ -120,7 +180,7 @@ func (s *Service) Status(ctx context.Context, req StatusRequest) (*StatusResult,
 	result.Detail = fmt.Sprintf(
 		"drift: %s on %s is running %s but SoroForge recorded %s; "+
 			"the contract was changed outside SoroForge",
-		r.Alias, r.NetworkName, result.ActualWasmHash, result.ExpectedWasmHash)
+		tracked.Alias, tracked.Network, result.ActualWasmHash, result.ExpectedWasmHash)
 	return result, nil
 }
 

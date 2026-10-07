@@ -271,6 +271,7 @@ Output goes to stdout and logs to stderr, so `--json` output stays pipeable.
 | `list` | List tracked contracts; `--network` filters. |
 | `history <alias>` | Show a contract's full deploy/upgrade timeline, newest first. |
 | `status <alias>` | Compare the on-chain WASM hash against the recorded one. |
+| `status --all` | Drift-check every tracked contract on the network, for a single CI gate. |
 | `serve` | Run the HTTP API. |
 | `migrate up\|down\|version` | Manage the schema. |
 | `version` | Print the SoroForge version. |
@@ -319,6 +320,7 @@ server **refuses to start without a token** — see the security notes.
 | `GET` | `/v1/contracts?network=` | Tracked contracts. |
 | `GET` | `/v1/contracts/{network}/{alias}/history` | Deployment history. |
 | `GET` | `/v1/contracts/{network}/{alias}/status` | Drift check. |
+| `GET` | `/v1/contracts/{network}/status` | Drift check of every tracked contract; `in_sync` is the verdict. |
 
 ```bash
 curl -X POST http://localhost:8080/v1/deploy \

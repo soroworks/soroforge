@@ -28,6 +28,7 @@ type fakeService struct {
 	deployResult  *deploy.DeployResult
 	upgradeResult *deploy.UpgradeResult
 	statusResult  *deploy.StatusResult
+	networkStatus *deploy.NetworkStatus
 	contracts     []store.Contract
 	deployments   []store.Deployment
 	err           error
@@ -67,6 +68,14 @@ func (f *fakeService) Status(_ context.Context, req deploy.StatusRequest) (*depl
 		return nil, f.err
 	}
 	return f.statusResult, nil
+}
+
+func (f *fakeService) StatusAll(_ context.Context, network string) (*deploy.NetworkStatus, error) {
+	f.lastNetwork = network
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.networkStatus, nil
 }
 
 func (f *fakeService) List(_ context.Context, network string) ([]store.Contract, error) {
@@ -435,4 +444,33 @@ func TestResponsesAreJSON(t *testing.T) {
 
 	rec := do(t, router, http.MethodGet, "/v1/contracts", nil, nil)
 	assert.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+}
+
+func TestStatusAllReportsDriftAsASuccessfulCheck(t *testing.T) {
+	svc := &fakeService{networkStatus: &deploy.NetworkStatus{
+		Network: "testnet",
+		InSync:  false,
+		Contracts: []deploy.StatusResult{
+			{Alias: "counter", Network: "testnet", State: deploy.StateInSync},
+			{Alias: "token", Network: "testnet", State: deploy.StateDrift},
+		},
+	}}
+	router := newTestRouter(t, svc)
+
+	rec := do(t, router, http.MethodGet, "/v1/contracts/testnet/status", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var body deploy.NetworkStatus
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.False(t, body.InSync)
+	assert.Len(t, body.Contracts, 2)
+	assert.Equal(t, "testnet", svc.lastNetwork)
+}
+
+func TestStatusAllRequiresAuth(t *testing.T) {
+	router := newTestRouter(t, &fakeService{networkStatus: &deploy.NetworkStatus{}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/contracts/testnet/status", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

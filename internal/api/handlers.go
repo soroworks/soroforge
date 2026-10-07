@@ -130,3 +130,14 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, result)
 }
+
+// statusAll drift-checks every tracked contract on a network. Like status,
+// drift is a 200: the check ran and the body carries the verdict in in_sync.
+func (h *handlers) statusAll(w http.ResponseWriter, r *http.Request) {
+	result, err := h.svc.StatusAll(r.Context(), chi.URLParam(r, "network"))
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}

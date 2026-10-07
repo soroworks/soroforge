@@ -207,3 +207,77 @@ func TestNewServiceValidatesRequiredDependencies(t *testing.T) {
 	_, err = deploy.New(deploy.Options{Config: newHarness(t, harnessOptions{}).svc.Config()})
 	assert.ErrorContains(t, err, "store is required")
 }
+
+func TestStatusAllChecksEveryTrackedContract(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	ctx := context.Background()
+
+	// counter is in sync; retired was removed from soroforge.yaml but is still
+	// tracked and has drifted; gone is tracked but has no instance on-chain.
+	trackContract(t, h, h.wasmHash)
+
+	retiredID := otherContractID(t, 2)
+	recorded := stellar.WasmHash([]byte("recorded"))
+	_, err := h.store.UpsertContract(ctx, store.Contract{
+		Alias: "retired", Network: "testnet", ContractID: retiredID, CurrentWasmHash: stellar.HashHex(recorded),
+	})
+	require.NoError(t, err)
+	require.NoError(t, h.client.SetContractInstance(retiredID, stellar.WasmHash([]byte("changed"))))
+
+	_, err = h.store.UpsertContract(ctx, store.Contract{
+		Alias: "gone", Network: "testnet", ContractID: otherContractID(t, 3), CurrentWasmHash: "aa",
+	})
+	require.NoError(t, err)
+
+	// A mainnet record must not appear in a testnet check.
+	_, err = h.store.UpsertContract(ctx, store.Contract{
+		Alias: "counter", Network: "mainnet", ContractID: otherContractID(t, 4), CurrentWasmHash: "bb",
+	})
+	require.NoError(t, err)
+
+	result, err := h.svc.StatusAll(ctx, "testnet")
+	require.NoError(t, err)
+
+	assert.Equal(t, "testnet", result.Network)
+	assert.False(t, result.InSync)
+	require.Len(t, result.Contracts, 3)
+
+	states := map[string]deploy.State{}
+	var order []string
+	for _, c := range result.Contracts {
+		states[c.Alias] = c.State
+		order = append(order, c.Alias)
+	}
+	assert.Equal(t, []string{"counter", "gone", "retired"}, order, "results are in alias order")
+	assert.Equal(t, deploy.StateInSync, states["counter"])
+	assert.Equal(t, deploy.StateMissing, states["gone"])
+	assert.Equal(t, deploy.StateDrift, states["retired"], "an alias missing from the config is still checked")
+}
+
+func TestStatusAllInSync(t *testing.T) {
+	h := newHarness(t, harnessOptions{noSigner: true})
+	trackContract(t, h, h.wasmHash)
+
+	result, err := h.svc.StatusAll(context.Background(), "")
+	require.NoError(t, err)
+	assert.True(t, result.InSync)
+	assert.Equal(t, "testnet", result.Network, "an empty network uses default_network")
+}
+
+func TestStatusAllWithNothingTracked(t *testing.T) {
+	// A network with no deployments is trivially in sync; config-declared
+	// contracts that were never deployed there are not drift.
+	h := newHarness(t, harnessOptions{})
+
+	result, err := h.svc.StatusAll(context.Background(), "mainnet")
+	require.NoError(t, err)
+	assert.True(t, result.InSync)
+	assert.Empty(t, result.Contracts)
+	assert.NotNil(t, result.Contracts, "an empty list, not null, in JSON")
+}
+
+func TestStatusAllRejectsUnknownNetwork(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	_, err := h.svc.StatusAll(context.Background(), "nowhere")
+	assert.Error(t, err)
+}

@@ -166,6 +166,18 @@ func testContractID(t *testing.T) string {
 	return id
 }
 
+// otherContractID returns a valid contract address distinct from
+// testContractID and from other seeds.
+func otherContractID(t *testing.T, seed byte) string {
+	t.Helper()
+	raw := make([]byte, 32)
+	raw[0] = 0xF0
+	raw[1] = seed
+	id, err := strkey.Encode(strkey.VersionByteContract, raw)
+	require.NoError(t, err)
+	return id
+}
+
 func TestDeployRecordsContractAndHistory(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	ctx := context.Background()

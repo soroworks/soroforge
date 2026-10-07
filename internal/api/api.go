@@ -35,6 +35,7 @@ type Service interface {
 	Deploy(ctx context.Context, req deploy.DeployRequest) (*deploy.DeployResult, error)
 	Upgrade(ctx context.Context, req deploy.UpgradeRequest) (*deploy.UpgradeResult, error)
 	Status(ctx context.Context, req deploy.StatusRequest) (*deploy.StatusResult, error)
+	StatusAll(ctx context.Context, network string) (*deploy.NetworkStatus, error)
 	List(ctx context.Context, network string) ([]store.Contract, error)
 	History(ctx context.Context, network, alias string) ([]store.Deployment, error)
 }
@@ -97,6 +98,7 @@ func NewRouter(opts Options) (http.Handler, error) {
 		r.Get("/contracts", h.listContracts)
 		r.Get("/contracts/{network}/{alias}/history", h.history)
 		r.Get("/contracts/{network}/{alias}/status", h.status)
+		r.Get("/contracts/{network}/status", h.statusAll)
 	})
 
 	return r, nil
