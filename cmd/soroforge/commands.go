@@ -26,8 +26,8 @@ var version = "dev"
 func newDeployCmd() *cobra.Command {
 	var (
 		dryRun    bool
-		extendTTL bool
 		notes     string
+		gitCommit string
 	)
 
 	cmd := &cobra.Command{
@@ -60,7 +60,7 @@ assembled envelopes, and writes nothing to the database.`,
 				Network:   flags.network,
 				Notes:     notes,
 				DryRun:    dryRun,
-				ExtendTTL: extendTTL,
+				GitCommit: gitCommit,
 			})
 			if err != nil {
 				return err
@@ -75,6 +75,7 @@ assembled envelopes, and writes nothing to the database.`,
 		"after confirming, extend the new contract's TTLs to the network's maximum")
 	cmd.Flags().StringVar(&notes, "notes", "",
 		"free-form note recorded with this deployment (e.g. a ticket or release tag)")
+	cmd.Flags().StringVar(&gitCommit, "git-commit", "", "override the detected source commit")
 
 	return cmd
 }
@@ -82,8 +83,8 @@ assembled envelopes, and writes nothing to the database.`,
 func newUpgradeCmd() *cobra.Command {
 	var (
 		dryRun    bool
-		extendTTL bool
 		notes     string
+		gitCommit string
 	)
 
 	cmd := &cobra.Command{
@@ -112,7 +113,7 @@ upgrade applied outside SoroForge is still reported accurately.`,
 				Network:   flags.network,
 				Notes:     notes,
 				DryRun:    dryRun,
-				ExtendTTL: extendTTL,
+				GitCommit: gitCommit,
 			})
 			if err != nil {
 				return err
@@ -127,6 +128,7 @@ upgrade applied outside SoroForge is still reported accurately.`,
 		"after confirming, extend the upgraded contract's TTLs to the network's maximum")
 	cmd.Flags().StringVar(&notes, "notes", "",
 		"free-form note recorded with this upgrade")
+	cmd.Flags().StringVar(&gitCommit, "git-commit", "", "override the detected source commit")
 
 	return cmd
 }

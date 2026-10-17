@@ -5,11 +5,34 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/soroworks/soroforge/internal/config"
 	"github.com/soroworks/soroforge/internal/stellar"
 	"github.com/soroworks/soroforge/internal/store"
 )
+
+func gitMetadata(dir, override string) (string, bool) {
+	commit := override
+	if commit == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+		cmd.Dir = dir
+		if output, err := cmd.Output(); err == nil {
+			commit = strings.TrimSpace(string(output))
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	return commit, err == nil && len(strings.TrimSpace(string(output))) > 0
+}
 
 // DeployRequest asks for a contract to be deployed.
 type DeployRequest struct {
@@ -26,11 +49,8 @@ type DeployRequest struct {
 	// records nothing.
 	DryRun bool `json:"dry_run,omitempty"`
 
-	// ExtendTTL renews the new contract's instance and code TTLs to the
-	// network's maximum after the deploy confirms. It costs one more
-	// transaction and is recorded as its own history entry. Ignored on a dry
-	// run: there is no on-chain contract to extend yet.
-	ExtendTTL bool `json:"extend_ttl,omitempty"`
+	// GitCommit overrides automatic commit detection, for detached CI checkouts.
+	GitCommit string `json:"git_commit,omitempty"`
 }
 
 // DeployResult describes a completed or simulated deploy.
@@ -172,6 +192,8 @@ func (s *Service) Deploy(ctx context.Context, req DeployRequest) (*DeployResult,
 	log.Info("contract created", "contract_id", contractID, "tx_hash", create.Hash)
 
 	// Record only now, after the network has confirmed both transactions.
+	gitCommit, dirty := gitMetadata(s.cfg.Dir(), req.GitCommit)
+
 	deployment, err := s.record(ctx, store.Deployment{
 		Alias:          r.Alias,
 		Network:        r.NetworkName,
@@ -182,6 +204,9 @@ func (s *Service) Deploy(ctx context.Context, req DeployRequest) (*DeployResult,
 		TxHash:         create.Hash,
 		Ledger:         create.Ledger,
 		Notes:          req.Notes,
+		GitCommit:      gitCommit,
+		Dirty:          dirty,
+		FeeCharged:     create.FeeCharged,
 	})
 	if err != nil {
 		return nil, err
