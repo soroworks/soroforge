@@ -84,10 +84,10 @@ func TestPostgresMigrationsAreReversible(t *testing.T) {
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
 	require.False(t, dirty, "migrations must not leave the database dirty")
-	require.Equal(t, uint(4), version)
+	require.Equal(t, uint(5), version)
 
 	// The suite that runs first leaves rows behind, and reverting the
-	// action-constraint migrations (000002, 000003) narrows the action
+	// action-constraint migrations (000002, 000004, 000005) narrows the action
 	// constraint — with a row using a newer action present the ADD CONSTRAINT
 	// correctly refuses, by design. Reversibility is a schema property, so
 	// prove it against a clean table.

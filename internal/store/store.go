@@ -44,6 +44,14 @@ const (
 	// function. No contract exists yet, so the record has no contract id.
 	ActionUpload Action = "upload"
 
+	// ActionExtend renews a contract's instance and code TTLs without
+	// touching its bytecode.
+	ActionExtend Action = "extend"
+
+	// ActionRestore brings a contract's archived entries back to the live
+	// ledger without changing its bytecode.
+	ActionRestore Action = "restore"
+
 	// ActionInvoke is an administrative function call against a deployed contract.
 	ActionInvoke Action = "invoke"
 )
@@ -51,7 +59,8 @@ const (
 // Valid reports whether a is a recognised action. The database enforces this
 // too; checking here produces a better error than a constraint violation.
 func (a Action) Valid() bool {
-	return a == ActionDeploy || a == ActionUpgrade || a == ActionUpload || a == ActionInvoke
+	return a == ActionDeploy || a == ActionUpgrade || a == ActionUpload ||
+		a == ActionExtend || a == ActionRestore || a == ActionInvoke
 }
 
 func (a Action) String() string { return string(a) }
@@ -177,8 +186,8 @@ func (d Deployment) Validate() error {
 	case d.WasmHash == "":
 		return fmt.Errorf("deployment: wasm_hash is required")
 	case !d.Action.Valid():
-		return fmt.Errorf("deployment: action must be %q, %q, %q, or %q, got %q",
-			ActionDeploy, ActionUpgrade, ActionUpload, ActionInvoke, d.Action)
+		return fmt.Errorf("deployment: action must be %q, %q, %q, %q, %q, or %q, got %q",
+			ActionDeploy, ActionUpgrade, ActionUpload, ActionExtend, ActionRestore, ActionInvoke, d.Action)
 	case d.DeployerPubkey == "":
 		return fmt.Errorf("deployment: deployer_pubkey is required")
 	}

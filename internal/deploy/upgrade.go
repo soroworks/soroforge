@@ -19,6 +19,10 @@ type UpgradeRequest struct {
 	DryRun    bool   `json:"dry_run,omitempty"`
 	GitCommit string `json:"git_commit,omitempty"`
 	WasmHash  string `json:"wasm_hash,omitempty"`
+
+	// ExtendTTL renews the upgraded contract's instance and code TTLs to the
+	// network's maximum after the upgrade confirms. Ignored on a dry run.
+	ExtendTTL bool `json:"extend_ttl,omitempty"`
 }
 
 // UpgradeResult describes a completed or simulated upgrade.

@@ -4,7 +4,9 @@ ALTER TABLE deployments
     DROP CONSTRAINT deployments_action_check;
 
 ALTER TABLE deployments
-    ADD CONSTRAINT deployments_action_check CHECK (action IN ('deploy', 'upgrade', 'upload', 'invoke'));
+    ADD CONSTRAINT deployments_action_check CHECK (
+        action IN ('deploy', 'upgrade', 'upload', 'extend', 'restore', 'invoke')
+    );
 
 ALTER TABLE deployments
     ADD COLUMN ci_run_url TEXT,

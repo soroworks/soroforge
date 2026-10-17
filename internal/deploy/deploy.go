@@ -50,6 +50,10 @@ type DeployRequest struct {
 	// records nothing.
 	DryRun bool `json:"dry_run,omitempty"`
 
+	// ExtendTTL renews the new contract's instance and code TTLs to the
+	// network's maximum after the deploy confirms. Ignored on a dry run.
+	ExtendTTL bool `json:"extend_ttl,omitempty"`
+
 	// GitCommit overrides automatic commit detection, for detached CI checkouts.
 	GitCommit string `json:"git_commit,omitempty"`
 }
