@@ -84,7 +84,7 @@ func TestPostgresMigrationsAreReversible(t *testing.T) {
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
 	require.False(t, dirty, "migrations must not leave the database dirty")
-	require.Equal(t, uint(3), version)
+	require.Equal(t, uint(4), version)
 
 	// The suite that runs first leaves rows behind, and reverting the
 	// action-constraint migrations (000002, 000003) narrows the action
