@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stellar/go-stellar-sdk/keypair"
@@ -20,80 +21,83 @@ func argFromYAML(t *testing.T, doc string) Arg {
 	return arg
 }
 
-func TestArgToScValScalarTypes(t *testing.T) {
-	tests := map[string]struct {
-		yaml     string
-		wantType xdr.ScValType
-		check    func(t *testing.T, v xdr.ScVal)
-	}{
-		"bool true": {
-			yaml:     "{type: bool, value: true}",
-			wantType: xdr.ScValTypeScvBool,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.True(t, *v.B) },
+// scalarArgCases is the table TestArgToScValScalarTypes runs. It lives at
+// package level so TestEveryRegisteredArgTypeHasATableCase can count the types
+// it covers; the cases themselves are the test's own.
+var scalarArgCases = map[string]struct {
+	yaml     string
+	wantType xdr.ScValType
+	check    func(t *testing.T, v xdr.ScVal)
+}{
+	"bool true": {
+		yaml:     "{type: bool, value: true}",
+		wantType: xdr.ScValTypeScvBool,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.True(t, *v.B) },
+	},
+	"bool false": {
+		yaml:     "{type: bool, value: false}",
+		wantType: xdr.ScValTypeScvBool,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.False(t, *v.B) },
+	},
+	"void": {
+		yaml:     "{type: void}",
+		wantType: xdr.ScValTypeScvVoid,
+	},
+	"u32": {
+		yaml:     "{type: u32, value: 4294967295}",
+		wantType: xdr.ScValTypeScvU32,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint32(4294967295), *v.U32) },
+	},
+	"i32 negative": {
+		yaml:     "{type: i32, value: -2147483648}",
+		wantType: xdr.ScValTypeScvI32,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Int32(-2147483648), *v.I32) },
+	},
+	"u64 quoted beyond float precision": {
+		// YAML numbers can lose precision through float64; quoting is the
+		// documented way to pass a large integer exactly.
+		yaml:     `{type: u64, value: "18446744073709551615"}`,
+		wantType: xdr.ScValTypeScvU64,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint64(18446744073709551615), *v.U64) },
+	},
+	"i64 negative": {
+		yaml:     "{type: i64, value: -9223372036854775808}",
+		wantType: xdr.ScValTypeScvI64,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Int64(-9223372036854775808), *v.I64) },
+	},
+	"string": {
+		yaml:     `{type: string, value: "MyToken"}`,
+		wantType: xdr.ScValTypeScvString,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.ScString("MyToken"), *v.Str) },
+	},
+	"symbol": {
+		yaml:     "{type: symbol, value: transfer}",
+		wantType: xdr.ScValTypeScvSymbol,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.ScSymbol("transfer"), *v.Sym) },
+	},
+	"bytes hex": {
+		yaml:     "{type: bytes, value: deadbeef}",
+		wantType: xdr.ScValTypeScvBytes,
+		check: func(t *testing.T, v xdr.ScVal) {
+			assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, []byte(*v.Bytes))
 		},
-		"bool false": {
-			yaml:     "{type: bool, value: false}",
-			wantType: xdr.ScValTypeScvBool,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.False(t, *v.B) },
+	},
+	"bytes with 0x prefix": {
+		yaml:     "{type: bytes, value: 0xdeadbeef}",
+		wantType: xdr.ScValTypeScvBytes,
+		check: func(t *testing.T, v xdr.ScVal) {
+			assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, []byte(*v.Bytes))
 		},
-		"void": {
-			yaml:     "{type: void}",
-			wantType: xdr.ScValTypeScvVoid,
-		},
-		"u32": {
-			yaml:     "{type: u32, value: 4294967295}",
-			wantType: xdr.ScValTypeScvU32,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint32(4294967295), *v.U32) },
-		},
-		"i32 negative": {
-			yaml:     "{type: i32, value: -2147483648}",
-			wantType: xdr.ScValTypeScvI32,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Int32(-2147483648), *v.I32) },
-		},
-		"u64 quoted beyond float precision": {
-			// YAML numbers can lose precision through float64; quoting is the
-			// documented way to pass a large integer exactly.
-			yaml:     `{type: u64, value: "18446744073709551615"}`,
-			wantType: xdr.ScValTypeScvU64,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint64(18446744073709551615), *v.U64) },
-		},
-		"i64 negative": {
-			yaml:     "{type: i64, value: -9223372036854775808}",
-			wantType: xdr.ScValTypeScvI64,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Int64(-9223372036854775808), *v.I64) },
-		},
-		"string": {
-			yaml:     `{type: string, value: "MyToken"}`,
-			wantType: xdr.ScValTypeScvString,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.ScString("MyToken"), *v.Str) },
-		},
-		"symbol": {
-			yaml:     "{type: symbol, value: transfer}",
-			wantType: xdr.ScValTypeScvSymbol,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.ScSymbol("transfer"), *v.Sym) },
-		},
-		"bytes hex": {
-			yaml:     "{type: bytes, value: deadbeef}",
-			wantType: xdr.ScValTypeScvBytes,
-			check: func(t *testing.T, v xdr.ScVal) {
-				assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, []byte(*v.Bytes))
-			},
-		},
-		"bytes with 0x prefix": {
-			yaml:     "{type: bytes, value: 0xdeadbeef}",
-			wantType: xdr.ScValTypeScvBytes,
-			check: func(t *testing.T, v xdr.ScVal) {
-				assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, []byte(*v.Bytes))
-			},
-		},
-		"unquoted integer read as string still parses": {
-			yaml:     "{type: u32, value: 7}",
-			wantType: xdr.ScValTypeScvU32,
-			check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint32(7), *v.U32) },
-		},
-	}
+	},
+	"unquoted integer read as string still parses": {
+		yaml:     "{type: u32, value: 7}",
+		wantType: xdr.ScValTypeScvU32,
+		check:    func(t *testing.T, v xdr.ScVal) { assert.Equal(t, xdr.Uint32(7), *v.U32) },
+	},
+}
 
-	for name, tc := range tests {
+func TestArgToScValScalarTypes(t *testing.T) {
+	for name, tc := range scalarArgCases {
 		t.Run(name, func(t *testing.T) {
 			val, err := argFromYAML(t, tc.yaml).ToScVal()
 			require.NoError(t, err)
@@ -108,45 +112,48 @@ func TestArgToScValScalarTypes(t *testing.T) {
 	}
 }
 
-func TestArgToScVal128BitIntegers(t *testing.T) {
-	// 128-bit values are the ones a token contract actually takes, and the
-	// hi/lo split is easy to get wrong — particularly for negatives, which use
-	// two's complement rather than sign-magnitude.
-	tests := map[string]struct {
-		yaml   string
-		wantHi any
-		wantLo xdr.Uint64
-	}{
-		"u128 zero": {
-			yaml: `{type: u128, value: "0"}`, wantHi: xdr.Uint64(0), wantLo: 0,
-		},
-		"u128 fits in low word": {
-			yaml:   `{type: u128, value: "18446744073709551615"}`,
-			wantHi: xdr.Uint64(0), wantLo: 18446744073709551615,
-		},
-		"u128 spans both words": {
-			yaml:   `{type: u128, value: "18446744073709551616"}`, // 2^64
-			wantHi: xdr.Uint64(1), wantLo: 0,
-		},
-		"u128 maximum": {
-			yaml:   `{type: u128, value: "340282366920938463463374607431768211455"}`,
-			wantHi: xdr.Uint64(18446744073709551615), wantLo: 18446744073709551615,
-		},
-		"i128 positive": {
-			yaml: `{type: i128, value: "1"}`, wantHi: xdr.Int64(0), wantLo: 1,
-		},
-		"i128 negative one": {
-			// Two's complement: -1 is all bits set.
-			yaml:   `{type: i128, value: "-1"}`,
-			wantHi: xdr.Int64(-1), wantLo: 18446744073709551615,
-		},
-		"i128 minimum": {
-			yaml:   `{type: i128, value: "-170141183460469231731687303715884105728"}`,
-			wantHi: xdr.Int64(-9223372036854775808), wantLo: 0,
-		},
-	}
+// int128ArgCases is the table TestArgToScVal128BitIntegers runs, at package
+// level for the same reason as scalarArgCases.
+var int128ArgCases = map[string]struct {
+	yaml   string
+	wantHi any
+	wantLo xdr.Uint64
+}{
+	"u128 zero": {
+		yaml: `{type: u128, value: "0"}`, wantHi: xdr.Uint64(0), wantLo: 0,
+	},
+	"u128 fits in low word": {
+		yaml:   `{type: u128, value: "18446744073709551615"}`,
+		wantHi: xdr.Uint64(0), wantLo: 18446744073709551615,
+	},
+	"u128 spans both words": {
+		yaml:   `{type: u128, value: "18446744073709551616"}`, // 2^64
+		wantHi: xdr.Uint64(1), wantLo: 0,
+	},
+	"u128 maximum": {
+		yaml:   `{type: u128, value: "340282366920938463463374607431768211455"}`,
+		wantHi: xdr.Uint64(18446744073709551615), wantLo: 18446744073709551615,
+	},
+	"i128 positive": {
+		yaml: `{type: i128, value: "1"}`, wantHi: xdr.Int64(0), wantLo: 1,
+	},
+	"i128 negative one": {
+		// Two's complement: -1 is all bits set.
+		yaml:   `{type: i128, value: "-1"}`,
+		wantHi: xdr.Int64(-1), wantLo: 18446744073709551615,
+	},
+	"i128 minimum": {
+		yaml:   `{type: i128, value: "-170141183460469231731687303715884105728"}`,
+		wantHi: xdr.Int64(-9223372036854775808), wantLo: 0,
+	},
+}
 
-	for name, tc := range tests {
+// TestArgToScVal128BitIntegers runs the 128-bit table. The values are the ones
+// a token contract actually takes, and the hi/lo split is easy to get wrong —
+// particularly for negatives, which use two's complement rather than
+// sign-magnitude.
+func TestArgToScVal128BitIntegers(t *testing.T) {
+	for name, tc := range int128ArgCases {
 		t.Run(name, func(t *testing.T) {
 			val, err := argFromYAML(t, tc.yaml).ToScVal()
 			require.NoError(t, err)
@@ -234,6 +241,66 @@ value:
 	assert.Equal(t, xdr.ScString("SoroForge"), *entries[0].Val.Str)
 }
 
+// structuredArgCases is the table of container types — the ones whose
+// interesting behaviour is recursion through the registry rather than scalar
+// encoding. It is table-driven for the same reason as scalarArgCases: the
+// registry coverage test must be able to see it.
+var structuredArgCases = map[string]struct {
+	yaml     string
+	wantType xdr.ScValType
+	check    func(t *testing.T, v xdr.ScVal)
+}{
+	"vec": {
+		yaml: `
+type: vec
+value:
+  - {type: u32, value: 1}
+  - {type: string, value: two}
+`,
+		wantType: xdr.ScValTypeScvVec,
+		check: func(t *testing.T, v xdr.ScVal) {
+			// The item types are the proof of recursion: they were produced
+			// by the same registry lookup as a top-level argument.
+			items := **v.Vec
+			require.Len(t, items, 2)
+			assert.Equal(t, xdr.ScValTypeScvU32, items[0].Type)
+			assert.Equal(t, xdr.ScValTypeScvString, items[1].Type)
+		},
+	},
+	"map": {
+		yaml: `
+type: map
+value:
+  - key: {type: symbol, value: name}
+    value: {type: string, value: SoroForge}
+`,
+		wantType: xdr.ScValTypeScvMap,
+		check: func(t *testing.T, v xdr.ScVal) {
+			entries := **v.Map
+			require.Len(t, entries, 1)
+			assert.Equal(t, xdr.ScSymbol("name"), *entries[0].Key.Sym)
+			assert.Equal(t, xdr.ScString("SoroForge"), *entries[0].Val.Str)
+		},
+	},
+}
+
+// TestArgToScValContainerTypes runs the container table, including the nested
+// lookups its check functions assert on.
+func TestArgToScValContainerTypes(t *testing.T) {
+	for name, tc := range structuredArgCases {
+		t.Run(name, func(t *testing.T) {
+			val, err := argFromYAML(t, tc.yaml).ToScVal()
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantType, val.Type)
+			if tc.check != nil {
+				tc.check(t, val)
+			}
+			_, err = xdr.MarshalBase64(val)
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestArgToScValXDREscapeHatch(t *testing.T) {
 	// The escape hatch is what keeps an unsupported type from being a hard
 	// block, so it must reproduce the value exactly.
@@ -246,78 +313,113 @@ func TestArgToScValXDREscapeHatch(t *testing.T) {
 	assert.Equal(t, original, val)
 }
 
-func TestArgToScValRejectsBadInput(t *testing.T) {
-	tests := map[string]struct {
-		arg     Arg
-		wantErr string
-	}{
-		"missing type": {
-			arg:     Arg{Value: NewValue(1)},
-			wantErr: "missing type",
-		},
-		"unknown type names the escape hatch": {
-			arg:     Arg{Type: "u256", Value: NewValue("1")},
-			wantErr: "type: xdr",
-		},
-		"u32 overflow": {
-			arg:     Arg{Type: ArgU32, Value: NewValue("4294967296")},
-			wantErr: "not a valid u32",
-		},
-		"u32 negative": {
-			arg:     Arg{Type: ArgU32, Value: NewValue("-1")},
-			wantErr: "not a valid u32",
-		},
-		"u128 out of range": {
-			arg:     Arg{Type: ArgU128, Value: NewValue("340282366920938463463374607431768211456")},
-			wantErr: "out of range",
-		},
-		"u128 negative": {
-			arg:     Arg{Type: ArgU128, Value: NewValue("-1")},
-			wantErr: "out of range",
-		},
-		"i128 not a number": {
-			arg:     Arg{Type: ArgI128, Value: NewValue("abc")},
-			wantErr: "not a valid decimal integer",
-		},
-		"bad bool": {
-			arg:     Arg{Type: ArgBool, Value: NewValue("maybe")},
-			wantErr: "not a boolean",
-		},
-		"bad hex bytes": {
-			arg:     Arg{Type: ArgBytes, Value: NewValue("nothex")},
-			wantErr: "not valid hex",
-		},
-		"bad address": {
-			arg:     Arg{Type: ArgAddress, Value: NewValue("nonsense")},
-			wantErr: "expected a G... account or C... contract address",
-		},
-		"symbol too long": {
-			arg:     Arg{Type: ArgSymbol, Value: NewValue("this_symbol_is_far_too_long_to_be_valid")},
-			wantErr: "limit is 32",
-		},
-		"symbol with illegal character": {
-			arg:     Arg{Type: ArgSymbol, Value: NewValue("has-a-dash")},
-			wantErr: "only [a-zA-Z0-9_]",
-		},
-		"bad base64 xdr": {
-			arg:     Arg{Type: ArgXDR, Value: NewValue("!!!!")},
-			wantErr: "not a valid base64 ScVal",
-		},
-		"missing value": {
-			arg:     Arg{Type: ArgU32},
-			wantErr: "missing value",
-		},
-		"scalar expected but list given": {
-			arg:     Arg{Type: ArgU32, Value: NewValue([]int{1, 2})},
-			wantErr: "expected a single value",
-		},
-	}
+// badInputArgCases is the table TestArgToScValRejectsBadInput runs, at
+// package level for the same reason as scalarArgCases. Several of its rows are
+// the only table-driven coverage their Arg type has (address, xdr).
+var badInputArgCases = map[string]struct {
+	arg     Arg
+	wantErr string
+}{
+	"missing type": {
+		arg:     Arg{Value: NewValue(1)},
+		wantErr: "missing type",
+	},
+	"unknown type names the escape hatch": {
+		arg:     Arg{Type: "u256", Value: NewValue("1")},
+		wantErr: "type: xdr",
+	},
+	"u32 overflow": {
+		arg:     Arg{Type: ArgU32, Value: NewValue("4294967296")},
+		wantErr: "not a valid u32",
+	},
+	"u32 negative": {
+		arg:     Arg{Type: ArgU32, Value: NewValue("-1")},
+		wantErr: "not a valid u32",
+	},
+	"u128 out of range": {
+		arg:     Arg{Type: ArgU128, Value: NewValue("340282366920938463463374607431768211456")},
+		wantErr: "out of range",
+	},
+	"u128 negative": {
+		arg:     Arg{Type: ArgU128, Value: NewValue("-1")},
+		wantErr: "out of range",
+	},
+	"i128 not a number": {
+		arg:     Arg{Type: ArgI128, Value: NewValue("abc")},
+		wantErr: "not a valid decimal integer",
+	},
+	"bad bool": {
+		arg:     Arg{Type: ArgBool, Value: NewValue("maybe")},
+		wantErr: "not a boolean",
+	},
+	"bad hex bytes": {
+		arg:     Arg{Type: ArgBytes, Value: NewValue("nothex")},
+		wantErr: "not valid hex",
+	},
+	"bad address": {
+		arg:     Arg{Type: ArgAddress, Value: NewValue("nonsense")},
+		wantErr: "expected a G... account or C... contract address",
+	},
+	"symbol too long": {
+		arg:     Arg{Type: ArgSymbol, Value: NewValue("this_symbol_is_far_too_long_to_be_valid")},
+		wantErr: "limit is 32",
+	},
+	"symbol with illegal character": {
+		arg:     Arg{Type: ArgSymbol, Value: NewValue("has-a-dash")},
+		wantErr: "only [a-zA-Z0-9_]",
+	},
+	"bad base64 xdr": {
+		arg:     Arg{Type: ArgXDR, Value: NewValue("!!!!")},
+		wantErr: "not a valid base64 ScVal",
+	},
+	"missing value": {
+		arg:     Arg{Type: ArgU32},
+		wantErr: "missing value",
+	},
+	"scalar expected but list given": {
+		arg:     Arg{Type: ArgU32, Value: NewValue([]int{1, 2})},
+		wantErr: "expected a single value",
+	},
+}
 
-	for name, tc := range tests {
+func TestArgToScValRejectsBadInput(t *testing.T) {
+	for name, tc := range badInputArgCases {
 		t.Run(name, func(t *testing.T) {
 			_, err := tc.arg.ToScVal()
 			assert.ErrorContains(t, err, tc.wantErr)
 		})
+	}
+}
+
+// TestEveryRegisteredArgTypeHasATableCase is the guard on argTypeRegistry: an
+// encoder registered without a table-driven case fails here, so a new type
+// cannot land untested just because the switch it replaced is gone.
+func TestEveryRegisteredArgTypeHasATableCase(t *testing.T) {
+	covered := map[string]bool{}
+	collect := func(arg Arg) {
+		name := strings.ToLower(strings.TrimSpace(arg.Type))
+		if name != "" {
+			covered[name] = true
+		}
+	}
+
+	for _, tc := range scalarArgCases {
+		collect(argFromYAML(t, tc.yaml))
+	}
+	for _, tc := range int128ArgCases {
+		collect(argFromYAML(t, tc.yaml))
+	}
+	for _, tc := range badInputArgCases {
+		collect(tc.arg)
+	}
+	for _, tc := range structuredArgCases {
+		collect(argFromYAML(t, tc.yaml))
+	}
+
+	for _, entry := range argTypeRegistry {
+		assert.True(t, covered[entry.name],
+			"Arg type %q is registered in argTypeRegistry but no table-driven case in args_test.go exercises it",
+			entry.name)
 	}
 }
 
