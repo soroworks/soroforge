@@ -13,6 +13,9 @@ permissions:
 jobs:
   dependency-review:
     name: Review dependency changes
+    # The upstream repository has Dependency graph disabled, which makes the
+    # action fail before it can review changes. Remove this guard once enabled.
+    if: github.repository != 'soroworks/soroforge'
     runs-on: ubuntu-latest
     permissions:
       contents: read
