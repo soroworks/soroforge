@@ -73,6 +73,10 @@ The secret key is never logged, stored, or printed. See the README security note
 		newDeployCmd(),
 		newUpgradeCmd(),
 		newUploadCmd(),
+		newExtendCmd(),
+		newRestoreCmd(),
+		newFundCmd(),
+		newWhoAmICmd(),
 		newListCmd(),
 		newHistoryCmd(),
 		newStatusCmd(),
@@ -166,10 +170,11 @@ type appOptions struct {
 	requireSigner bool
 
 	// storeOptional allows the command to run without Postgres, using a
-	// throwaway in-memory store. Only `deploy --dry-run` sets it: a dry run
-	// records nothing, so requiring a database to validate a config would be
-	// friction with no purpose. Every command that writes history still
-	// insists on a real database.
+	// throwaway in-memory store. Commands that never touch deployment history
+	// set it — `deploy --dry-run`, `fund`, and `whoami` — because requiring a
+	// database to validate a config or fund an account would be friction with
+	// no purpose. Every command that reads or writes history still insists on
+	// a real database.
 	storeOptional bool
 }
 

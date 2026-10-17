@@ -25,6 +25,12 @@ type DeployRequest struct {
 	// DryRun assembles and simulates the transactions but submits nothing and
 	// records nothing.
 	DryRun bool `json:"dry_run,omitempty"`
+
+	// ExtendTTL renews the new contract's instance and code TTLs to the
+	// network's maximum after the deploy confirms. It costs one more
+	// transaction and is recorded as its own history entry. Ignored on a dry
+	// run: there is no on-chain contract to extend yet.
+	ExtendTTL bool `json:"extend_ttl,omitempty"`
 }
 
 // DeployResult describes a completed or simulated deploy.
@@ -60,6 +66,17 @@ type DeployResult struct {
 	// Catalog reports registration with the network's sorovault_url. Absent
 	// on a dry run or when no registry is configured.
 	Catalog *CatalogStatus `json:"catalog,omitempty"`
+
+	// Extension reports the TTL extension --extend-ttl requested. Absent
+	// unless the extension succeeded.
+	Extension *ExtendResult `json:"extension,omitempty"`
+
+	// ExtensionError is set when --extend-ttl was requested but the
+	// extension failed after the deploy was confirmed and recorded. The
+	// contract is live; retrying the extension with `soroforge extend` is the
+	// recovery path, which is why this is reported rather than treated as a
+	// failed deploy.
+	ExtensionError string `json:"extension_error,omitempty"`
 }
 
 // Deploy uploads a contract's bytecode and instantiates it, then records the
@@ -170,6 +187,16 @@ func (s *Service) Deploy(ctx context.Context, req DeployRequest) (*DeployResult,
 		return nil, err
 	}
 	result.Deployment = deployment
+
+	if req.ExtendTTL && !req.DryRun {
+		result.Extension, result.ExtensionError = s.extendAfterChange(ctx, r, signer, store.Contract{
+			Alias:           r.Alias,
+			Network:         r.NetworkName,
+			ContractID:      contractID,
+			CurrentWasmHash: wasmHashHex,
+		}, log)
+	}
+
 	result.Catalog = s.publish(ctx, r, contractID, log)
 
 	return result, nil

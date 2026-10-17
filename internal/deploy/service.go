@@ -247,7 +247,7 @@ type txResult struct {
 func (s *Service) runTransaction(
 	ctx context.Context,
 	r resolved,
-	op *txnbuild.InvokeHostFunction,
+	op txnbuild.Operation,
 	dryRun bool,
 ) (txResult, error) {
 	signer, err := s.requireSigner()

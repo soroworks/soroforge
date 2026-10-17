@@ -100,6 +100,18 @@ doesn't expose one **cannot be upgraded**, and SoroForge will report the
 contract's own error. The entrypoint name defaults to `upgrade` and is
 configurable per contract via `upgrade_fn`.
 
+**TTLs expire, and archived contracts need restoring.** Every Soroban ledger
+entry has a TTL, and a contract's instance and code entries have their own. When
+one lapses the contract is *archived*: it still exists, but calling it fails
+until the entries are restored. Extending pays rent for more time and is much
+cheaper than restoring later, so `soroforge deploy` and `soroforge upgrade`
+accept `--extend-ttl`, which renews the new bytecode's entries to the network's
+maximum after the change confirms. For an existing contract, `soroforge extend`
+does the same on demand — run it before a quiet contract's TTL runs out.
+`soroforge status` reports an archived contract as such, and `soroforge restore`
+brings its entries back with the same address and bytecode. Both operations are
+recorded in history as their own actions.
+
 ---
 
 ## Quickstart — deploy to testnet
@@ -146,9 +158,9 @@ cp .env.example .env
 ```
 
 Set `DATABASE_URL`, and a deployer key via either `SOROFORGE_SECRET_KEY` or
-`SOROFORGE_KEYSTORE_PATH`. Fund the account at
-<https://friendbot.stellar.org> if you haven't. Read the [security
-notes](#security-notes-on-key-handling) first.
+`SOROFORGE_KEYSTORE_PATH`. Check the account with `soroforge whoami`, and top it
+up with `soroforge fund` on networks configured with a Friendbot (the scaffolded
+testnet is). Read the [security notes](#security-notes-on-key-handling) first.
 
 **4. Dry run.** This assembles and simulates both transactions, prints the
 contract address a real deploy would produce, and submits and records nothing:
@@ -190,6 +202,7 @@ networks:
     rpc_url: https://soroban-testnet.stellar.org
     passphrase: "Test SDF Network ; September 2015"
     sorovault_url: http://localhost:8080   # optional
+    friendbot_url: https://friendbot.stellar.org   # optional; enables `soroforge fund`
 
 contracts:
   counter:
@@ -303,15 +316,24 @@ falling back.
 | `deploy <alias>` | Upload WASM, instantiate the contract, record it. |
 | `upgrade <alias>` | Upload new WASM and invoke the contract's upgrade entrypoint. |
 | `upload <alias>` | Install WASM on-chain without deploying or upgrading; prints the hash for a governance proposal. |
+| `extend <alias>` | Renew a contract's instance and code TTLs before they lapse. |
+| `restore <alias>` | Restore a contract whose entries were archived, keeping its address. |
+| `fund` | Top up the deployer account from the network's Friendbot (test networks only). |
+| `whoami` | Show the deployer account, where its key came from, and its balance. |
 | `list` | List tracked contracts; `--network` filters. |
-| `history <alias>` | Show a contract's full deploy/upgrade timeline, newest first. |
+| `history <alias>` | Show a contract's full deploy/upgrade/extend/restore timeline, newest first. |
 | `status <alias>` | Compare the on-chain WASM hash against the recorded one. |
 | `status --all` | Drift-check every tracked contract on the network, for a single CI gate. |
 | `serve` | Run the HTTP API. |
 | `migrate up\|down\|version` | Manage the schema. |
 | `version` | Print the SoroForge version. |
 
-`deploy`, `upgrade`, and `upload` accept `--dry-run` and `--notes`.
+`deploy`, `upgrade`, and `upload` accept `--dry-run` and `--notes`; `deploy` and
+`upgrade` also accept `--extend-ttl` to renew the new bytecode's TTLs after the
+change confirms. `extend` takes `--ledgers N` (default: the network's maximum)
+and, like `restore`, accepts `--dry-run` and `--notes`. `--extend-ttl` never
+runs on a dry run, and a failed extension is reported without failing the
+deploy: the contract is live and recorded either way.
 
 **`--dry-run`** runs everything up to and including simulation and assembly,
 then stops. It prints the assembled envelopes and the resulting contract
@@ -323,15 +345,17 @@ address, and writes nothing and submits nothing. It's safe to point at mainnet.
 |---|---|
 | `0` | In sync. |
 | `1` | The check could not be completed. |
-| `2` | Drift, untracked, or missing on-chain. |
+| `2` | Drift, untracked, missing, or archived on-chain. |
 
-The four states it reports:
+The five states it reports:
 
 - **`in_sync`** — the chain matches the record.
 - **`drift`** — the contract is running bytecode SoroForge didn't deploy.
   Someone changed it another way.
 - **`untracked`** — SoroForge has no record of this contract on this network.
 - **`missing`** — SoroForge has a record, but the chain has no such contract.
+- **`archived`** — the contract's TTL lapsed and it is no longer callable;
+  `soroforge restore <alias>` brings it back.
 
 ---
 
@@ -464,11 +488,12 @@ the extension point for the signing-related ones — see
 cmd/soroforge/      cobra CLI
 internal/config/    soroforge.yaml + env loading, validation, ScVal encoding
 internal/stellar/   RPC client, transaction assembly, signing (all interfaced)
-internal/deploy/    deploy/upgrade/status orchestration
+internal/deploy/    deploy/upgrade/status/extend/restore orchestration
 internal/store/     Postgres history + embedded migrations
 internal/api/       chi HTTP handlers mirroring the CLI
 internal/readiness/ database + per-network RPC probes behind GET /ready
 internal/catalog/   best-effort registration with SoroVault after a deploy
+internal/friendbot/ talk to a test network's Friendbot faucet
 ```
 
 Three interfaces are the seams: `stellar.Client` (RPC), `stellar.Signer`

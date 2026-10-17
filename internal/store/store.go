@@ -9,6 +9,10 @@
 // own; "counter on testnet" and "counter on mainnet" are separate records with
 // separate lifecycles, and no query in this package crosses that boundary
 // implicitly.
+//
+// The history is append-only: every on-chain change to a tracked contract —
+// deploy, upgrade, upload, TTL extension, or restore — is a row, and the rows
+// for one contract are its lifecycle log.
 package store
 
 import (
@@ -39,12 +43,23 @@ const (
 	// a proposal and a separate party later calls the contract's upgrade
 	// function. No contract exists yet, so the record has no contract id.
 	ActionUpload Action = "upload"
+
+	// ActionExtend extends a contract's instance and code TTLs without
+	// touching its bytecode. It is recorded like any other on-chain change so
+	// the history answers "when did someone last renew this contract".
+	ActionExtend Action = "extend"
+
+	// ActionRestore brings a contract's archived entries back to the live
+	// ledger. The contract's bytecode does not change; its entries become
+	// callable again.
+	ActionRestore Action = "restore"
 )
 
 // Valid reports whether a is a recognised action. The database enforces this
 // too; checking here produces a better error than a constraint violation.
 func (a Action) Valid() bool {
-	return a == ActionDeploy || a == ActionUpgrade || a == ActionUpload
+	return a == ActionDeploy || a == ActionUpgrade || a == ActionUpload ||
+		a == ActionExtend || a == ActionRestore
 }
 
 func (a Action) String() string { return string(a) }
@@ -131,8 +146,8 @@ func (d Deployment) Validate() error {
 	case d.WasmHash == "":
 		return fmt.Errorf("deployment: wasm_hash is required")
 	case !d.Action.Valid():
-		return fmt.Errorf("deployment: action must be %q, %q, or %q, got %q",
-			ActionDeploy, ActionUpgrade, ActionUpload, d.Action)
+		return fmt.Errorf("deployment: action must be one of %q, %q, %q, %q, %q, got %q",
+			ActionDeploy, ActionUpgrade, ActionUpload, ActionExtend, ActionRestore, d.Action)
 	case d.DeployerPubkey == "":
 		return fmt.Errorf("deployment: deployer_pubkey is required")
 	}

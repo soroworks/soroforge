@@ -97,6 +97,17 @@ func TestSigningSeedErrors(t *testing.T) {
 	})
 }
 
+func TestSigningSource(t *testing.T) {
+	// The label is what commands like `soroforge whoami` print so operators
+	// can confirm which key is in use without the key ever being read.
+	assert.Empty(t, Env{}.SigningSource())
+	assert.Equal(t, "env:"+EnvSecretKey, Env{SecretKey: "SABC"}.SigningSource())
+	assert.Equal(t, "keystore:/keys/deployer", Env{KeystorePath: "/keys/deployer"}.SigningSource())
+	assert.Equal(t, "env:"+EnvSecretKey,
+		Env{SecretKey: "SABC", KeystorePath: "/keys/deployer"}.SigningSource(),
+		"the same precedence as SigningSeed must apply")
+}
+
 func TestHasSigningKey(t *testing.T) {
 	assert.False(t, Env{}.HasSigningKey())
 	assert.True(t, Env{SecretKey: "S"}.HasSigningKey())

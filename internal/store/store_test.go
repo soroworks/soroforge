@@ -236,6 +236,26 @@ func runStoreSuite(t *testing.T, newStore func(t *testing.T) store.Store) {
 		assert.Equal(t, uint32(300), history[0].Ledger)
 	})
 
+	t.Run("ttl lifecycle actions record with the contract's hash", func(t *testing.T) {
+		// Extend and restore change an existing contract on-chain, so unlike
+		// an upload they carry the contract id and the hash it runs.
+		s := newStore(t)
+
+		for _, action := range []store.Action{store.ActionExtend, store.ActionRestore} {
+			_, err := s.RecordDeployment(ctx, store.Deployment{
+				Alias: "counter", Network: "testnet", ContractID: "C1", WasmHash: "c0ffee",
+				Action: action, DeployerPubkey: "GABC", TxHash: "tx-" + string(action),
+			})
+			require.NoError(t, err)
+		}
+
+		history, err := s.History(ctx, "testnet", "counter")
+		require.NoError(t, err)
+		require.Len(t, history, 2)
+		assert.Equal(t, store.ActionRestore, history[0].Action)
+		assert.Equal(t, store.ActionExtend, history[1].Action)
+	})
+
 	t.Run("invalid records are rejected", func(t *testing.T) {
 		s := newStore(t)
 
@@ -286,6 +306,8 @@ func TestActionValid(t *testing.T) {
 	assert.True(t, store.ActionDeploy.Valid())
 	assert.True(t, store.ActionUpgrade.Valid())
 	assert.True(t, store.ActionUpload.Valid())
+	assert.True(t, store.ActionExtend.Valid())
+	assert.True(t, store.ActionRestore.Valid())
 	assert.False(t, store.Action("rollback").Valid())
 	assert.False(t, store.Action("").Valid())
 }

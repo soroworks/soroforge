@@ -16,6 +16,12 @@ type UpgradeRequest struct {
 	Network string `json:"network,omitempty"`
 	Notes   string `json:"notes,omitempty"`
 	DryRun  bool   `json:"dry_run,omitempty"`
+
+	// ExtendTTL renews the upgraded contract's instance and code TTLs to the
+	// network's maximum after the upgrade confirms. It costs one more
+	// transaction and is recorded as its own history entry. Ignored on a dry
+	// run.
+	ExtendTTL bool `json:"extend_ttl,omitempty"`
 }
 
 // UpgradeResult describes a completed or simulated upgrade.
@@ -55,6 +61,15 @@ type UpgradeResult struct {
 	// network's sorovault_url. Absent on a dry run, on a no-change upgrade,
 	// or when no registry is configured.
 	Catalog *CatalogStatus `json:"catalog,omitempty"`
+
+	// Extension reports the TTL extension --extend-ttl requested. Absent
+	// unless the extension succeeded.
+	Extension *ExtendResult `json:"extension,omitempty"`
+
+	// ExtensionError is set when --extend-ttl was requested but the extension
+	// failed after the upgrade was confirmed and recorded. The contract is
+	// upgraded; retry the extension with `soroforge extend`.
+	ExtensionError string `json:"extension_error,omitempty"`
 }
 
 // Upgrade replaces a tracked contract's bytecode, keeping its address.
@@ -82,13 +97,8 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResu
 	// Upgrading requires knowing which contract to upgrade, and that is exactly
 	// what the tracked history is for. An untracked contract is a deploy, not
 	// an upgrade.
-	tracked, err := s.store.GetContract(ctx, r.NetworkName, r.Alias)
+	tracked, err := s.trackedContract(ctx, r)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, fmt.Errorf(
-				"contract %s is not tracked on %s; deploy it first with `soroforge deploy %s`",
-				r.Alias, r.NetworkName, r.Alias)
-		}
 		return nil, err
 	}
 
@@ -125,6 +135,13 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResu
 	// answer to "is this a no-op?" comes from the chain.
 	liveHash, err := stellar.OnChainWasmHash(ctx, r.Client, tracked.ContractID)
 	if err != nil {
+		var archived *stellar.ErrContractArchived
+		if errors.As(err, &archived) {
+			return nil, fmt.Errorf(
+				"contract %s is archived on %s and cannot be upgraded until it is restored; "+
+					"run `soroforge restore %s` first",
+				tracked.ContractID, r.NetworkName, r.Alias)
+		}
 		return nil, fmt.Errorf("read current on-chain wasm hash: %w", err)
 	}
 	result.PreviousWasmHash = stellar.HashHex(liveHash)
@@ -198,6 +215,11 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResu
 		return nil, err
 	}
 	result.Deployment = deployment
+
+	if req.ExtendTTL && !req.DryRun {
+		result.Extension, result.ExtensionError = s.extendAfterChange(ctx, r, signer, tracked, log)
+	}
+
 	result.Catalog = s.publish(ctx, r, tracked.ContractID, log)
 
 	return result, nil

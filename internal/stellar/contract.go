@@ -82,13 +82,26 @@ func CodeLedgerKey(wasmHash xdr.Hash) xdr.LedgerKey {
 }
 
 // ErrContractNotFound reports that a contract has no instance entry on the
-// target network — it was never deployed there, or has expired from the ledger.
+// target network — it was never deployed there. It is returned both for
+// contracts that have never existed and for entries a pre-Protocol-23 RPC
+// cannot see because they are archived; use ReadContractEntries to tell those
+// apart on a current RPC.
 type ErrContractNotFound struct {
 	ContractID string
 }
 
 func (e *ErrContractNotFound) Error() string {
 	return fmt.Sprintf("contract %s has no instance entry on this network", e.ContractID)
+}
+
+// ErrContractArchived reports that a contract's instance entry exists but its
+// TTL has expired, so the contract cannot be called until it is restored.
+type ErrContractArchived struct {
+	ContractID string
+}
+
+func (e *ErrContractArchived) Error() string {
+	return fmt.Sprintf("contract %s is archived: its TTL expired, so it must be restored before use", e.ContractID)
 }
 
 // OnChainWasmHash reports the WASM hash a deployed contract is currently
@@ -98,56 +111,20 @@ func (e *ErrContractNotFound) Error() string {
 // what it believes it deployed, and this reports what is actually live. When
 // they disagree, someone changed the contract outside SoroForge.
 //
-// It returns *ErrContractNotFound if the contract has no instance entry.
+// It returns *ErrContractNotFound if the contract has no instance entry, and
+// *ErrContractArchived if the instance exists but its TTL has expired.
 func OnChainWasmHash(ctx context.Context, client Client, contractID string) (xdr.Hash, error) {
-	var zero xdr.Hash
-
-	key, err := InstanceLedgerKey(contractID)
+	entries, err := ReadContractEntries(ctx, client, contractID)
 	if err != nil {
-		return zero, err
+		return xdr.Hash{}, err
 	}
-	encodedKey, err := xdr.MarshalBase64(key)
-	if err != nil {
-		return zero, fmt.Errorf("encode instance ledger key: %w", err)
+	if !entries.Instance.Found {
+		return xdr.Hash{}, &ErrContractNotFound{ContractID: contractID}
 	}
-
-	entries, err := client.LedgerEntries(ctx, []string{encodedKey})
-	if err != nil {
-		return zero, err
+	if entries.Instance.Archived {
+		return xdr.Hash{}, &ErrContractArchived{ContractID: contractID}
 	}
-	if len(entries) == 0 {
-		return zero, &ErrContractNotFound{ContractID: contractID}
-	}
-
-	var data xdr.LedgerEntryData
-	if err := xdr.SafeUnmarshalBase64(entries[0].DataXDR, &data); err != nil {
-		return zero, fmt.Errorf("decode contract instance entry: %w", err)
-	}
-	if data.ContractData == nil {
-		return zero, fmt.Errorf("contract %s: ledger entry is not contract data", contractID)
-	}
-
-	instance := data.ContractData.Val.Instance
-	if instance == nil {
-		return zero, fmt.Errorf("contract %s: ledger entry holds no contract instance", contractID)
-	}
-
-	switch instance.Executable.Type {
-	case xdr.ContractExecutableTypeContractExecutableWasm:
-		if instance.Executable.WasmHash == nil {
-			return zero, fmt.Errorf("contract %s: instance declares WASM but carries no hash", contractID)
-		}
-		return *instance.Executable.WasmHash, nil
-
-	case xdr.ContractExecutableTypeContractExecutableStellarAsset:
-		// Stellar Asset Contracts are built into the protocol and have no
-		// uploaded bytecode, so there is nothing to compare against.
-		return zero, fmt.Errorf("contract %s is a Stellar Asset Contract and has no WASM hash", contractID)
-
-	default:
-		return zero, fmt.Errorf("contract %s has an unsupported executable type %s",
-			contractID, instance.Executable.Type.String())
-	}
+	return entries.WasmHash, nil
 }
 
 // WasmUploaded reports whether bytecode with this hash already exists on-chain.
