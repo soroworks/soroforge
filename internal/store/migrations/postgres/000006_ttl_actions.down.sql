@@ -1,4 +1,4 @@
--- Reverses 000004_ttl_actions.up.sql.
+-- Reverses 000006_ttl_actions.up.sql.
 --
 -- Narrowing the constraint re-validates existing rows, so this fails loudly if
 -- any 'extend' or 'restore' rows are present rather than deleting history to
@@ -8,4 +8,4 @@ ALTER TABLE deployments
     DROP CONSTRAINT deployments_action_check;
 
 ALTER TABLE deployments
-    ADD CONSTRAINT deployments_action_check CHECK (action IN ('deploy', 'upgrade', 'upload'));
+    ADD CONSTRAINT deployments_action_check CHECK (action IN ('deploy', 'upgrade', 'upload', 'invoke'));

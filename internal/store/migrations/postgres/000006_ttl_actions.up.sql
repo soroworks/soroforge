@@ -6,4 +6,6 @@ ALTER TABLE deployments
     DROP CONSTRAINT deployments_action_check;
 
 ALTER TABLE deployments
-    ADD CONSTRAINT deployments_action_check CHECK (action IN ('deploy', 'upgrade', 'upload', 'extend', 'restore'));
+    ADD CONSTRAINT deployments_action_check CHECK (
+        action IN ('deploy', 'upgrade', 'upload', 'invoke', 'extend', 'restore')
+    );
