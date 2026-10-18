@@ -809,7 +809,7 @@ Endpoints:
 				return err
 			}
 
-			return serve(cmd.Context(), api.NewServer(listenAddr, handler))
+			return serve(cmd.Context(), api.NewServer(listenAddr, handler), a.service)
 		},
 	}
 
@@ -821,7 +821,11 @@ Endpoints:
 
 // serve runs the HTTP server until interrupted, then shuts it down gracefully
 // so an in-flight deploy is not cut off mid-submission.
-func serve(ctx context.Context, srv *http.Server) error {
+func serve(ctx context.Context, srv *http.Server, service *deploy.Service) (serveErr error) {
+	defer func() {
+		serveErr = errors.Join(serveErr, service.Close())
+	}()
+
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
