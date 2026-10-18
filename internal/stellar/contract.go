@@ -161,14 +161,14 @@ func (e *ErrContractNotFound) Error() string {
 	return fmt.Sprintf("contract %s has no instance entry on this network", e.ContractID)
 }
 
-// ErrContractArchived reports that a contract's instance entry exists but its
-// TTL has expired, so the contract cannot be called until it is restored.
-type ErrContractArchived struct {
+// ErrStellarAssetContract reports that a contract is a Stellar Asset Contract
+// and has no uploaded bytecode or WASM hash.
+type ErrStellarAssetContract struct {
 	ContractID string
 }
 
-func (e *ErrContractArchived) Error() string {
-	return fmt.Sprintf("contract %s is archived: its TTL expired, so it must be restored before use", e.ContractID)
+func (e *ErrStellarAssetContract) Error() string {
+	return fmt.Sprintf("contract %s is a Stellar Asset Contract and has no WASM hash", e.ContractID)
 }
 
 // OnChainWasmHash reports the WASM hash a deployed contract is currently
@@ -188,8 +188,27 @@ func OnChainWasmHash(ctx context.Context, client Client, contractID string) (xdr
 	if !entries.Instance.Found {
 		return xdr.Hash{}, &ErrContractNotFound{ContractID: contractID}
 	}
-	if entries.Instance.Archived {
-		return xdr.Hash{}, &ErrContractArchived{ContractID: contractID}
+
+	instance := data.ContractData.Val.Instance
+	if instance == nil {
+		return zero, fmt.Errorf("contract %s: ledger entry holds no contract instance", contractID)
+	}
+
+	switch instance.Executable.Type {
+	case xdr.ContractExecutableTypeContractExecutableWasm:
+		if instance.Executable.WasmHash == nil {
+			return zero, fmt.Errorf("contract %s: instance declares WASM but carries no hash", contractID)
+		}
+		return *instance.Executable.WasmHash, nil
+
+	case xdr.ContractExecutableTypeContractExecutableStellarAsset:
+		// Stellar Asset Contracts are built into the protocol and have no
+		// uploaded bytecode, so there is nothing to compare against.
+		return zero, &ErrStellarAssetContract{ContractID: contractID}
+
+	default:
+		return zero, fmt.Errorf("contract %s has an unsupported executable type %s",
+			contractID, instance.Executable.Type.String())
 	}
 	return entries.WasmHash, nil
 }

@@ -169,14 +169,18 @@ func checkTracked(ctx context.Context, client stellar.Client, tracked store.Cont
 				tracked.Alias, tracked.ContractID, tracked.Network)
 			return result, nil
 		}
-
-		var archived *stellar.ErrContractArchived
-		if errors.As(err, &archived) {
-			result.State = StateArchived
+		var sacErr *stellar.ErrStellarAssetContract
+		if errors.As(err, &sacErr) {
+			result.ActualWasmHash = "stellar_asset"
+			if tracked.CurrentWasmHash == "stellar_asset" {
+				result.State = StateInSync
+				result.Detail = fmt.Sprintf("%s on %s is a Stellar Asset Contract in sync", tracked.Alias, tracked.Network)
+				return result, nil
+			}
+			result.State = StateDrift
 			result.Detail = fmt.Sprintf(
-				"%s on %s is archived: its TTL expired and it is no longer callable; "+
-					"run `soroforge restore %s` to bring it back",
-				tracked.Alias, tracked.Network, tracked.Alias)
+				"drift: %s on %s is running a Stellar Asset Contract but SoroForge recorded %s",
+				tracked.Alias, tracked.Network, tracked.CurrentWasmHash)
 			return result, nil
 		}
 		return nil, err
