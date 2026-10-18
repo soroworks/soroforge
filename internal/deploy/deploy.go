@@ -109,6 +109,10 @@ type DeployResult struct {
 	// recovery path, which is why this is reported rather than treated as a
 	// failed deploy.
 	ExtensionError string `json:"extension_error,omitempty"`
+
+	// Webhooks reports the outcome of delivering notifications to configured
+	// webhook endpoints. Absent on a dry run or when no webhooks are configured.
+	Webhooks []WebhookStatus `json:"webhooks,omitempty"`
 }
 
 // Deploy uploads a contract's bytecode and instantiates it, then records the
@@ -287,6 +291,19 @@ func (s *Service) Deploy(ctx context.Context, req DeployRequest) (*DeployResult,
 	}
 
 	result.Catalog = s.publish(ctx, r, contractID, log)
+	result.Webhooks = s.notifyWebhooks(ctx, r.Network, WebhookPayload{
+		Alias:          r.Alias,
+		Network:        r.NetworkName,
+		ContractID:     contractID,
+		Contract:       contractID,
+		WasmHash:       wasmHashHex,
+		Action:         store.ActionDeploy,
+		DeployerPubkey: signer.Address(),
+		TxHash:         create.Hash,
+		Tx:             create.Hash,
+		Ledger:         create.Ledger,
+		Notes:          req.Notes,
+	}, log)
 
 	return result, nil
 }

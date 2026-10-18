@@ -71,6 +71,11 @@ type UpgradeResult struct {
 	// failed after the upgrade was confirmed and recorded. The contract is
 	// upgraded; retry the extension with `soroforge extend`.
 	ExtensionError string `json:"extension_error,omitempty"`
+
+	// Webhooks reports the outcome of delivering notifications to configured
+	// webhook endpoints. Absent on a dry run, on a no-change upgrade, or when
+	// no webhooks are configured.
+	Webhooks []WebhookStatus `json:"webhooks,omitempty"`
 }
 
 func (s *Service) resolveUpgradeHash(ctx context.Context, r resolved, input string) (xdr.Hash, string, error) {
@@ -297,6 +302,19 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResu
 	}
 
 	result.Catalog = s.publish(ctx, r, tracked.ContractID, log)
+	result.Webhooks = s.notifyWebhooks(ctx, r.Network, WebhookPayload{
+		Alias:          r.Alias,
+		Network:        r.NetworkName,
+		ContractID:     tracked.ContractID,
+		Contract:       tracked.ContractID,
+		WasmHash:       wasmHashHex,
+		Action:         store.ActionUpgrade,
+		DeployerPubkey: signer.Address(),
+		TxHash:         upgrade.Hash,
+		Tx:             upgrade.Hash,
+		Ledger:         upgrade.Ledger,
+		Notes:          req.Notes,
+	}, log)
 
 	return result, nil
 }

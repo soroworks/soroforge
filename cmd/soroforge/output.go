@@ -75,6 +75,7 @@ func printDeployResult(r *deploy.DeployResult) error {
 	}
 	printExtension(w, r.Alias, r.Extension, r.ExtensionError)
 	printCatalog(w, r.Catalog)
+	printWebhooks(w, r.Webhooks)
 
 	if r.DryRun {
 		fmt.Fprintf(w, "\nAssembled transaction envelopes (unsigned):\n")
@@ -136,6 +137,7 @@ func printUpgradeResult(r *deploy.UpgradeResult) error {
 	}
 	printExtension(w, r.Alias, r.Extension, r.ExtensionError)
 	printCatalog(w, r.Catalog)
+	printWebhooks(w, r.Webhooks)
 
 	if r.DryRun && r.UpgradeEnvelopeXDR != "" {
 		fmt.Fprintf(w, "\nAssembled upgrade envelope (unsigned):\n\n  %s\n", r.UpgradeEnvelopeXDR)
@@ -396,6 +398,16 @@ func printCatalog(w io.Writer, c *deploy.CatalogStatus) {
 		return
 	}
 	fmt.Fprintf(w, "  SoroVault     %s (%d functions)\n", c.Entry.URL, c.Entry.Functions)
+}
+
+func printWebhooks(w io.Writer, webhooks []deploy.WebhookStatus) {
+	for _, wh := range webhooks {
+		if !wh.OK {
+			fmt.Fprintf(w, "  Webhook       failed (%s): %s\n", wh.URL, wh.Error)
+		} else {
+			fmt.Fprintf(w, "  Webhook       delivered to %s\n", wh.URL)
+		}
+	}
 }
 
 func printContracts(contracts []store.Contract) error {
