@@ -78,7 +78,7 @@ func TestSQLiteMigrationsAreReversible(t *testing.T) {
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
 	require.False(t, dirty)
-	require.Equal(t, uint(4), version)
+	require.Equal(t, uint(5), version)
 
 	require.NoError(t, migrator.Up())
 }

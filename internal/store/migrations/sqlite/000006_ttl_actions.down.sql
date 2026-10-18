@@ -19,6 +19,7 @@ CREATE TABLE deployments_rebuild (
     ci_run_url      TEXT,
     fn_name         TEXT,
     fn_args         TEXT,
+    constructor_args TEXT,
     created_at      TEXT        NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
 
     CONSTRAINT deployments_action_check CHECK (action IN ('deploy', 'upgrade', 'upload', 'invoke'))
@@ -27,12 +28,12 @@ CREATE TABLE deployments_rebuild (
 INSERT INTO deployments_rebuild (
     id, alias, network, contract_id, wasm_hash, action, deployer_pubkey,
     tx_hash, ledger, git_commit, dirty, fee_charged, notes,
-    ci_run_url, fn_name, fn_args, created_at
+    ci_run_url, fn_name, fn_args, constructor_args, created_at
 )
 SELECT
     id, alias, network, contract_id, wasm_hash, action, deployer_pubkey,
     tx_hash, ledger, git_commit, dirty, fee_charged, notes,
-    ci_run_url, fn_name, fn_args, created_at
+    ci_run_url, fn_name, fn_args, constructor_args, created_at
 FROM deployments;
 
 DROP TABLE deployments;

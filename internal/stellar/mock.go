@@ -62,6 +62,12 @@ type MockClient struct {
 	// SendHash.
 	SendFunc func(ctx context.Context, signedTxXDR string) (SendResult, error)
 
+	// AfterSend, if set, runs once for every envelope passed to Send, before
+	// SendFunc. Tests use it to keep the mocked ledger consistent with what a
+	// submitted transaction would have done — for example, moving a contract's
+	// instance to the new WASM hash when an upgrade invocation is accepted.
+	AfterSend func(ctx context.Context, signedTxXDR string)
+
 	// SendHash is the transaction hash reported by the default Send.
 	SendHash string
 
@@ -81,6 +87,11 @@ type MockClient struct {
 	// entries that exist but whose TTL has expired. They are returned with a
 	// liveUntilLedgerSeq of 0, matching how a Protocol 23 RPC reports them.
 	ArchivedEntries map[string]string
+
+	// LedgerEntriesFunc overrides LedgerEntries. When nil, Entries is
+	// consulted. Tests use it to model a node serving stale entries, or to
+	// make an entry appear after a bounded number of reads.
+	LedgerEntriesFunc func(ctx context.Context, keysB64 []string) ([]LedgerEntry, error)
 
 	// LoadAccountErr, if set, makes LoadAccount fail.
 	LoadAccountErr error
@@ -161,6 +172,10 @@ func (m *MockClient) Send(ctx context.Context, signedTxXDR string) (SendResult, 
 	m.Sent = append(m.Sent, signedTxXDR)
 	m.mu.Unlock()
 
+	if m.AfterSend != nil {
+		m.AfterSend(ctx, signedTxXDR)
+	}
+
 	if m.SendFunc != nil {
 		return m.SendFunc(ctx, signedTxXDR)
 	}
@@ -182,7 +197,11 @@ func (m *MockClient) AwaitTransaction(_ context.Context, hash string) (TxResult,
 // LedgerEntries implements Client. Keys with no entry are omitted from the
 // result, matching how the RPC reports a missing entry. Live entries report a
 // TTL comfortably ahead of the current ledger; archived entries report 0.
-func (m *MockClient) LedgerEntries(_ context.Context, keysB64 []string) ([]LedgerEntry, error) {
+func (m *MockClient) LedgerEntries(ctx context.Context, keysB64 []string) ([]LedgerEntry, error) {
+	if m.LedgerEntriesFunc != nil {
+		return m.LedgerEntriesFunc(ctx, keysB64)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
