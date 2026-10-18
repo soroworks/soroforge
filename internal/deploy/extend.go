@@ -193,7 +193,7 @@ func (s *Service) extendTTL(
 	}
 
 	op := stellar.ExtendFootprintTTLOp(extendTo, keys, signer.Address())
-	tx, err := s.runTransaction(ctx, r, op, dryRun)
+	tx, err := s.runTransaction(ctx, r, op, "extend", dryRun)
 	if err != nil {
 		return nil, fmt.Errorf("extend ttl on %s: %w", tracked.ContractID, err)
 	}

@@ -110,7 +110,7 @@ func (s *Service) Restore(ctx context.Context, req RestoreRequest) (*RestoreResu
 	log.Info("restoring archived entries", "entries", names)
 
 	op := stellar.RestoreFootprintOp(keys, signer.Address())
-	tx, err := s.runTransaction(ctx, r, op, req.DryRun)
+	tx, err := s.runTransaction(ctx, r, op, "restore", req.DryRun)
 	if err != nil {
 		return nil, fmt.Errorf("restore %s: %w", tracked.ContractID, err)
 	}
