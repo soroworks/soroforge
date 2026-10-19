@@ -88,12 +88,17 @@ type Options struct {
 	// Service performs the work. Required.
 	Service Service
 
-	// Tokens are the bearer credentials the API accepts. At least one is
-	// required; the server refuses to start without one.
+	// Tokens are the scoped bearer credentials the API accepts. At least one
+	// is required; the server refuses to start without one.
 	Tokens []Token
 
 	// Readiness checks dependencies for GET /ready. Required.
 	Readiness Readiness
+
+	// RateLimit bounds how often one client may call /v1. The zero value
+	// disables limiting; soroforge serve sets it from configuration, where
+	// the documented defaults live.
+	RateLimit RateLimitOptions
 
 	// CORSOrigins, when non-empty, allows exactly these browser origins to
 	// call the API cross-origin; empty (the default) sends no CORS headers at
@@ -191,6 +196,7 @@ func NewRouter(opts Options) (http.Handler, error) {
 		jobs:      newJobManager(opts.JobRetention, log),
 	}
 	auth := &authenticator{tokens: opts.Tokens}
+	rateLimit := RateLimit(opts.RateLimit)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -201,6 +207,11 @@ func NewRouter(opts Options) (http.Handler, error) {
 	r.Use(middleware.Timeout(requestTimeout))
 
 	for _, rt := range h.routes() {
+		if strings.HasPrefix(rt.pattern, "/v1/") {
+			r.With(rateLimit, auth.authorize(rt.scope, rt.pattern)).
+				Method(rt.method, rt.pattern, rt.handler)
+			continue
+		}
 		r.With(auth.authorize(rt.scope, rt.pattern)).Method(rt.method, rt.pattern, rt.handler)
 	}
 
