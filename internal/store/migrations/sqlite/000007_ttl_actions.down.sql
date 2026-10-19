@@ -1,4 +1,4 @@
--- Reverses 000006_ttl_actions.up.sql. Narrowing the constraint re-validates
+-- Reverses 000007_ttl_actions.up.sql. Narrowing the constraint re-validates
 -- existing rows, so this fails loudly if any 'extend' or 'restore' rows are
 -- present rather than deleting history to make itself work.
 

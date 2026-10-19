@@ -221,7 +221,7 @@ func wasmHashFromInstanceEntry(contractID string, entry LedgerEntry) (xdr.Hash, 
 	case xdr.ContractExecutableTypeContractExecutableStellarAsset:
 		// Stellar Asset Contracts are built into the protocol and have no
 		// uploaded bytecode, so there is no TTL to extend and no code entry.
-		return zero, fmt.Errorf("contract %s is a Stellar Asset Contract and has no WASM hash", contractID)
+		return zero, &ErrStellarAssetContract{ContractID: contractID}
 
 	default:
 		return zero, fmt.Errorf("contract %s has an unsupported executable type %s",

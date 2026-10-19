@@ -1,7 +1,7 @@
--- Mirrors postgres/000006_ttl_actions.up.sql: allows the 'extend' and
+-- Mirrors postgres/000007_ttl_actions.up.sql: allows the 'extend' and
 -- 'restore' lifecycle actions. Widening a CHECK in SQLite means rebuilding
 -- the table, as in 000002 and 000004. The rebuild copies every column
--- through 000005, including constructor_args.
+-- through 000005, including constructor_args (000006 adds a separate table).
 
 CREATE TABLE deployments_rebuild (
     id              INTEGER     PRIMARY KEY AUTOINCREMENT,
