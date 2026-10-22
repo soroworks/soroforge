@@ -114,6 +114,7 @@ refuses rather than hanging. --dry-run never prompts.`,
 				DryRun:      dryRun,
 				GitCommit:   gitCommit,
 				RequireSpec: requireSpec,
+				Actor:       "cli",
 			}
 
 			switch {

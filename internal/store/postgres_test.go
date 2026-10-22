@@ -92,7 +92,7 @@ func TestPostgresMigrationsAreReversible(t *testing.T) {
 	require.False(t, dirty, "migrations must not leave the database dirty")
 	// Bump this alongside every new migration: it is what catches a migration
 	// file that is present but never applied.
-	require.Equal(t, uint(6), version)
+	require.Equal(t, uint(9), version)
 
 	// The suite that runs first leaves rows behind, and reverting 000002
 	// narrows the action constraint — with an 'upload' row present the ADD

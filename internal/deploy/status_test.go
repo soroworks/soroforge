@@ -163,15 +163,15 @@ func TestHistoryReturnsFullTimeline(t *testing.T) {
 	for _, d := range []store.Deployment{
 		{
 			Alias: "counter", Network: "testnet", ContractID: h.contractID, WasmHash: "v1",
-			Action: store.ActionDeploy, DeployerPubkey: "GABC",
+			Action: store.ActionDeploy, DeployerPubkey: "GABC", Actor: "cli",
 		},
 		{
 			Alias: "counter", Network: "testnet", ContractID: h.contractID, WasmHash: "v2",
-			Action: store.ActionUpgrade, DeployerPubkey: "GABC",
+			Action: store.ActionUpgrade, DeployerPubkey: "GABC", Actor: "cli",
 		},
 		{
 			Alias: "counter", Network: "testnet", ContractID: h.contractID, WasmHash: "v3",
-			Action: store.ActionUpgrade, DeployerPubkey: "GDEF",
+			Action: store.ActionUpgrade, DeployerPubkey: "GDEF", Actor: "cli",
 		},
 	} {
 		_, err := h.store.RecordDeployment(ctx, d)
@@ -193,7 +193,7 @@ func TestHistoryDefaultsToConfiguredNetwork(t *testing.T) {
 
 	_, err := h.store.RecordDeployment(ctx, store.Deployment{
 		Alias: "counter", Network: "testnet", ContractID: h.contractID, WasmHash: "v1",
-		Action: store.ActionDeploy, DeployerPubkey: "GABC",
+		Action: store.ActionDeploy, DeployerPubkey: "GABC", Actor: "cli",
 	})
 	require.NoError(t, err)
 

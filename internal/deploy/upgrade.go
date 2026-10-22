@@ -21,6 +21,11 @@ type UpgradeRequest struct {
 	GitCommit   string `json:"git_commit,omitempty"`
 	WasmHash    string `json:"wasm_hash,omitempty"`
 	RequireSpec bool   `json:"require_spec,omitempty"`
+
+	// Actor is the identity that triggered the upgrade. For CLI this is
+	// "cli"; for API it is the token name. It is recorded in the deployment
+	// history for audit purposes.
+	Actor string `json:"-"`
 }
 
 // UpgradeResult describes a completed or simulated upgrade.
@@ -133,6 +138,9 @@ func (s *Service) resolveUpgradeHash(ctx context.Context, r resolved, input stri
 // The entrypoint name defaults to "upgrade" and is configurable per contract
 // via `upgrade_fn`.
 func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (_ *UpgradeResult, err error) {
+	if req.Actor == "" {
+		req.Actor = "cli"
+	}
 	r, err := s.resolve(req.Network, req.Alias)
 	if err != nil {
 		return nil, err
@@ -348,6 +356,7 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (_ *UpgradeRe
 		WasmHash:       wasmHashHex,
 		Action:         store.ActionUpgrade,
 		DeployerPubkey: signer.Address(),
+		Actor:          req.Actor,
 		TxHash:         upgrade.Hash,
 		Ledger:         upgrade.Ledger,
 		Notes:          req.Notes,

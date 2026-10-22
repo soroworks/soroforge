@@ -72,6 +72,7 @@ refuses rather than hanging. --dry-run never prompts.`,
 				GitCommit:   gitCommit,
 				WasmHash:    wasmHash,
 				RequireSpec: requireSpec,
+				Actor:       "cli",
 			})
 			if err != nil {
 				return err

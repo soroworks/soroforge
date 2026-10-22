@@ -476,7 +476,7 @@ func printHistory(alias, network string, deployments []store.Deployment) error {
 		}
 	}
 	tw := tabwriter.NewWriter(out(), 0, 0, 2, ' ', 0)
-	header := "WHEN\tACTION\tWASM HASH\tDEPLOYER\tLEDGER\tFEE (STROOPS)\tFEE (XLM)\tCOMMIT\tTX\tCI RUN"
+	header := "WHEN\tACTION\tACTOR\tWASM HASH\tDEPLOYER\tLEDGER\tFEE (STROOPS)\tFEE (XLM)\tCOMMIT\tTX\tCI RUN"
 	if hasExplorerLinks {
 		header += "\tCONTRACT URL\tTX URL"
 	}
@@ -498,6 +498,10 @@ func printHistory(alias, network string, deployments []store.Deployment) error {
 		if d.CIRunURL != "" {
 			ciRun = d.CIRunURL
 		}
+		actor := d.Actor
+		if actor == "" {
+			actor = "cli"
+		}
 		notes := d.Notes
 		if d.Action == store.ActionInvoke && d.FnName != "" {
 			inv := d.FnName
@@ -515,6 +519,7 @@ func printHistory(alias, network string, deployments []store.Deployment) error {
 		cols := []string{
 			formatTime(d.CreatedAt),
 			string(d.Action),
+			actor,
 			shortHash(d.WasmHash),
 			shortHash(d.DeployerPubkey),
 			formatLedger(d.Ledger),
