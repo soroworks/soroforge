@@ -30,6 +30,10 @@ type ExtendRequest struct {
 
 	Notes  string `json:"notes,omitempty"`
 	DryRun bool   `json:"dry_run,omitempty"`
+
+	// Actor is the identity that triggered the extension: "cli" for the CLI,
+	// the token name for the API. It is recorded in the deployment history.
+	Actor string `json:"-"`
 }
 
 // ExtendResult describes a completed or simulated TTL extension.
@@ -93,7 +97,11 @@ func (s *Service) Extend(ctx context.Context, req ExtendRequest) (*ExtendResult,
 		"dry_run", req.DryRun,
 	)
 
-	return s.extendTTL(ctx, r, signer, tracked, req.Ledgers, req.DryRun, req.Notes, log)
+	actor := req.Actor
+	if actor == "" {
+		actor = "cli"
+	}
+	return s.extendTTL(ctx, r, signer, tracked, req.Ledgers, req.DryRun, req.Notes, actor, log)
 }
 
 // extendAfterChange renews a freshly deployed or upgraded contract's TTLs when
@@ -108,9 +116,10 @@ func (s *Service) extendAfterChange(
 	r resolved,
 	signer stellar.Signer,
 	tracked store.Contract,
+	actor string,
 	log *slog.Logger,
 ) (*ExtendResult, string) {
-	ext, err := s.extendTTL(ctx, r, signer, tracked, 0, false, "", log)
+	ext, err := s.extendTTL(ctx, r, signer, tracked, 0, false, "", actor, log)
 	if err != nil {
 		log.Warn("contract is live and recorded, but extending its TTL failed; "+
 			"retry with `soroforge extend`", "error", err)
@@ -148,6 +157,7 @@ func (s *Service) extendTTL(
 	requested uint32,
 	dryRun bool,
 	notes string,
+	actor string,
 	log *slog.Logger,
 ) (*ExtendResult, error) {
 	entries, err := stellar.ReadContractEntries(ctx, r.Client, tracked.ContractID)
@@ -220,6 +230,7 @@ func (s *Service) extendTTL(
 		TxHash:         tx.Hash,
 		Ledger:         tx.Ledger,
 		Notes:          notes,
+		Actor:          actor,
 	})
 	if err != nil {
 		return nil, err

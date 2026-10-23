@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -46,6 +47,13 @@ const (
 	// EnvSignerPublicKey is the G... address the command signs for. It cannot
 	// be derived without the private key, so it must be configured explicitly.
 	EnvSignerPublicKey = "SOROFORGE_SIGNER_PUBLIC_KEY"
+
+	// EnvCosignerKeystores lists keystore files, separated like PATH, each
+	// holding one co-signer's seed for a deployer account protected by
+	// multisig thresholds. Co-signer keys come from files only, never from
+	// the environment itself, for the same reason EnvKeystorePath is
+	// preferred over EnvSecretKey.
+	EnvCosignerKeystores = "SOROFORGE_COSIGNER_KEYSTORES"
 
 	// EnvMaxContractSize overrides the maximum contract WASM size, in bytes.
 	// Defaults to the network's current limit; see stellar.DefaultMaxContractSize.
@@ -129,17 +137,19 @@ type Env struct {
 	KeystorePath    string
 	SignerCommand   string
 	SignerPublicKey string
-	MaxContractSize string
-	APIToken        string
-	APITokens       string
-	APIAddr         string
-	APICORSOrigins  string
-	LogFormat       string
-	APIRateLimit    string
-	APIRateBurst    string
-	APITrustProxy   string
-	TLSCert         string
-	TLSKey          string
+	// CosignerKeystores is the raw EnvCosignerKeystores path list.
+	CosignerKeystores string
+	MaxContractSize   string
+	APIToken          string
+	APITokens         string
+	APIAddr           string
+	APICORSOrigins    string
+	LogFormat         string
+	APIRateLimit      string
+	APIRateBurst      string
+	APITrustProxy     string
+	TLSCert           string
+	TLSKey            string
 	// AllowInsecureKeystore accepts a keystore readable by group or others.
 	// See EnvAllowInsecureKeystore.
 	AllowInsecureKeystore bool
@@ -155,6 +165,7 @@ func LoadEnv() Env {
 		KeystorePath:          strings.TrimSpace(os.Getenv(EnvKeystorePath)),
 		SignerCommand:         strings.TrimSpace(os.Getenv(EnvSignerCommand)),
 		SignerPublicKey:       strings.TrimSpace(os.Getenv(EnvSignerPublicKey)),
+		CosignerKeystores:     strings.TrimSpace(os.Getenv(EnvCosignerKeystores)),
 		MaxContractSize:       strings.TrimSpace(os.Getenv(EnvMaxContractSize)),
 		APIToken:              os.Getenv(EnvAPIToken),
 		APITokens:             strings.TrimSpace(os.Getenv(EnvAPITokens)),
@@ -367,6 +378,33 @@ func (e Env) SigningSeed() (seed string, source string, err error) {
 	)
 }
 
+// CosignerSeeds reads the co-signer seeds listed in EnvCosignerKeystores, in
+// order. Each file gets the same treatment as EnvKeystorePath: the permission
+// check, whitespace trimming, and an empty file is an error. Errors name the
+// file, never its contents. No paths configured yields no seeds.
+func (e Env) CosignerSeeds() (seeds []string, sources []string, err error) {
+	for _, path := range filepath.SplitList(e.CosignerKeystores) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if err := checkKeystorePermissions(path, e.AllowInsecureKeystore); err != nil {
+			return nil, nil, err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read co-signer keystore %s: %w", path, err)
+		}
+		seed := strings.TrimSpace(string(raw))
+		if seed == "" {
+			return nil, nil, fmt.Errorf("co-signer keystore %s is empty", path)
+		}
+		seeds = append(seeds, seed)
+		sources = append(sources, "keystore:"+path)
+	}
+	return seeds, sources, nil
+}
+
 // checkKeystorePermissions refuses a keystore that group or other can read.
 //
 // A keystore holds a seed that may sign mainnet deploys, and the README asks
@@ -403,6 +441,13 @@ func checkKeystorePermissions(path string, allowInsecure bool) error {
 // for, or two key sources racing to sign the same transaction.
 func (e Env) ValidateSigningConfig() error {
 	hasSeed := e.SecretKey != "" || e.KeystorePath != ""
+
+	if e.CosignerKeystores != "" && !e.HasSigningKey() {
+		return fmt.Errorf(
+			"%s is set but no primary signing key is configured; co-signers sign alongside "+
+				"the deployer key (%s, %s, or %s), not instead of it",
+			EnvCosignerKeystores, EnvSecretKey, EnvKeystorePath, EnvSignerCommand)
+	}
 
 	if e.SignerCommand == "" {
 		if e.SignerPublicKey != "" {
@@ -473,6 +518,7 @@ func (e Env) Redacted() map[string]string {
 		EnvKeystorePath:          e.KeystorePath,          // a path is not itself a secret
 		EnvSignerCommand:         redact(e.SignerCommand), // arguments may embed credentials
 		EnvSignerPublicKey:       e.SignerPublicKey,       // a public key is not a secret
+		EnvCosignerKeystores:     e.CosignerKeystores,     // paths are not themselves secrets
 		EnvMaxContractSize:       e.MaxContractSize,
 		EnvAPIToken:              redact(e.APIToken),
 		EnvAPITokens:             redact(e.APITokens),

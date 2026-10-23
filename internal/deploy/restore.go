@@ -23,6 +23,10 @@ type RestoreRequest struct {
 	Network string `json:"network,omitempty"`
 	Notes   string `json:"notes,omitempty"`
 	DryRun  bool   `json:"dry_run,omitempty"`
+
+	// Actor is the identity that triggered the restore: "cli" for the CLI,
+	// the token name for the API. It is recorded in the deployment history.
+	Actor string `json:"-"`
 }
 
 // RestoreResult describes a completed or simulated restore.
@@ -62,6 +66,10 @@ type RestoreResult struct {
 // go into the transaction, because restoring an already-live entry is
 // rejected.
 func (s *Service) Restore(ctx context.Context, req RestoreRequest) (*RestoreResult, error) {
+	actor := req.Actor
+	if actor == "" {
+		actor = "cli"
+	}
 	r, err := s.resolve(req.Network, req.Alias)
 	if err != nil {
 		return nil, err
@@ -137,6 +145,7 @@ func (s *Service) Restore(ctx context.Context, req RestoreRequest) (*RestoreResu
 		TxHash:         tx.Hash,
 		Ledger:         tx.Ledger,
 		Notes:          req.Notes,
+		Actor:          actor,
 	})
 	if err != nil {
 		return nil, err

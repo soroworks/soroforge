@@ -7,7 +7,7 @@ name: Auto-merge
 
 on:
   workflow_run:
-    workflows: [CI, Security, CodeQL, Dependency review]
+    workflows: [CI, Security, CodeQL, Dependency review, Malware scan]
     types: [completed]
   # Catches PRs whose last check finished while another merge was running.
   schedule:
@@ -38,10 +38,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          fetch-depth: 0
       - name: Merge passing pull requests
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUIRED_CHECKS: "test docker govulncheck"
+          REQUIRED_CHECKS: "test docker govulncheck malware-scan"
           PROTECTED_PATHS: ".github/ .goreleaser.yaml Dockerfile"
           CI_WORKFLOW: "ci.yml"
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}

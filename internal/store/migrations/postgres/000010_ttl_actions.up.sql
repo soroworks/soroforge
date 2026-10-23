@@ -3,9 +3,7 @@
 -- contract's archived entries back to the live ledger. Neither changes the
 -- contract's bytecode, but both are on-chain changes worth recording.
 ALTER TABLE deployments
-    DROP CONSTRAINT deployments_action_check;
-
-ALTER TABLE deployments
+    DROP CONSTRAINT deployments_action_check,
     ADD CONSTRAINT deployments_action_check CHECK (
-        action IN ('deploy', 'upgrade', 'upload', 'invoke', 'extend', 'restore')
+        action IN ('deploy', 'upgrade', 'upload', 'invoke', 'track', 'extend', 'restore')
     );

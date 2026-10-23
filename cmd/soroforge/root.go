@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/soroworks/soroforge/internal/config"
 	"github.com/soroworks/soroforge/internal/deploy"
@@ -82,9 +83,12 @@ the README security notes.`,
 		newRestoreCmd(),
 		newFundCmd(),
 		newWhoAmICmd(),
+		newTrackCmd(),
 		newListCmd(),
 		newHistoryCmd(),
 		newStatusCmd(),
+		newDiffCmd(),
+		newAliasCmd(),
 		newNetworksCmd(),
 		newServeCmd(),
 		newMigrateCmd(),
@@ -187,6 +191,11 @@ type appOptions struct {
 	// progress receives deploy progress events. Nil keeps the service silent,
 	// which is what read-only commands and `serve` want.
 	progress deploy.ProgressFunc
+
+	// confirmTimeout bounds waiting for transaction confirmation. Zero lets
+	// deploy.New apply DefaultConfirmTimeout (two minutes). Only deploy and
+	// upgrade set it, from --confirm-timeout.
+	confirmTimeout time.Duration
 }
 
 // newApp loads configuration, connects to Postgres, and builds the service.
@@ -235,6 +244,7 @@ func newApp(ctx context.Context, opts appOptions) (*app, error) {
 		Signer:          signer,
 		MaxContractSize: maxContractSize,
 		Progress:        opts.progress,
+		ConfirmTimeout:  opts.confirmTimeout,
 		Log:             slog.Default(),
 	})
 	if err != nil {
@@ -245,6 +255,19 @@ func newApp(ctx context.Context, opts appOptions) (*app, error) {
 	a.closers = append(a.closers, service.Close)
 
 	return a, nil
+}
+
+// checkConfirmTimeout rejects an explicit --confirm-timeout that would not
+// extend the wait: deploy.New silently substitutes DefaultConfirmTimeout for a
+// non-positive value, but a zero typed on the command line is far more likely
+// a mistake than a wish for the default, so the CLI refuses it before any
+// config is loaded or any network call is made.
+func checkConfirmTimeout(changed bool, d time.Duration) error {
+	if !changed || d > 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"--confirm-timeout must be positive (for example 5m), got %s", d)
 }
 
 // loadEnvOnly reads SoroForge's environment without requiring soroforge.yaml.
@@ -263,6 +286,44 @@ func loadEnvOnly() config.Env { return config.LoadEnv() }
 // Env.ValidateSigningConfig rejects configuring both, so a key file on a
 // workstation cannot silently sign a deploy that was meant for an HSM.
 func buildSigner(cfg *config.Config, required bool) (stellar.Signer, error) {
+	primary, err := buildPrimarySigner(cfg, required)
+	if err != nil || primary == nil {
+		return primary, err
+	}
+	return withCosigners(cfg, primary)
+}
+
+// withCosigners wraps primary in a MultiSigner when co-signer keystores are
+// configured, for a deployer account protected by multisig thresholds.
+func withCosigners(cfg *config.Config, primary stellar.Signer) (stellar.Signer, error) {
+	seeds, sources, err := cfg.Env.CosignerSeeds()
+	if err != nil {
+		return nil, err
+	}
+	if len(seeds) == 0 {
+		return primary, nil
+	}
+
+	cosigners := make([]stellar.Signer, len(seeds))
+	for i, seed := range seeds {
+		signer, err := stellar.NewKeypairSigner(seed)
+		if err != nil {
+			return nil, fmt.Errorf("co-signer: %w (key source: %s)", err, sources[i])
+		}
+		cosigners[i] = signer
+	}
+
+	multi, err := stellar.NewMultiSigner(primary, cosigners...)
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("configured co-signers", "address", multi.Address(), "signers", multi.Signers())
+	return multi, nil
+}
+
+// buildPrimarySigner builds the signer whose address is the transaction
+// source.
+func buildPrimarySigner(cfg *config.Config, required bool) (stellar.Signer, error) {
 	if err := cfg.Env.ValidateSigningConfig(); err != nil {
 		return nil, err
 	}

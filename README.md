@@ -307,6 +307,26 @@ inferred from the name — it's mixed into every signature, so a wrong value
 produces a transaction that's invalid on the network you meant to use, and a
 silently defaulted one could sign a mainnet deploy with testnet assumptions.
 
+**Environment references in URLs.** Most mainnet RPC providers put an API key
+in the URL. Keep it out of the committed file by referencing an environment
+variable as `${NAME}` in `rpc_url` or `sorovault_url`:
+
+```yaml
+networks:
+  mainnet:
+    rpc_url: https://provider.example/v1/${MAINNET_RPC_KEY}
+```
+
+- Only the braced `${NAME}` form is expanded; a bare `$NAME` or any other `$`
+  is left as written.
+- A referenced variable that is unset or empty is a load error naming the
+  variable and the key — never a silently empty URL.
+- Only `rpc_url` and `sorovault_url` are expanded. The passphrase, contract
+  fields and constructor arguments are not: the passphrase must be reviewable
+  as written, and contract settings are recorded in the deployment history.
+- The expanded value is never printed. Error messages, `config show` and its
+  `--json` output show the `${NAME}` form, so the key cannot leak into CI logs.
+
 To see what SoroForge actually resolved — file, environment and flags merged —
 run `soroforge config show`. It needs neither Postgres nor a signing key, prints
 contract WASM paths resolved to absolute paths, and reports secrets only as
@@ -481,6 +501,7 @@ contracts:
 |---|---|
 | `DATABASE_URL` | History database: `postgres://...` or `sqlite:///path/to/file.db`. Required except for `deploy --dry-run`. |
 | `SOROFORGE_SECRET_KEY` | Deployer secret seed (`S...`). |
+| `SOROFORGE_COSIGNER_KEYSTORES` | Path list (separated like `PATH`) of co-signer keystore files, for a multisig deployer account. See [Security notes](#security-notes-on-key-handling). |
 | `SOROFORGE_KEYSTORE_PATH` | Path to a file containing only the seed. |
 | `SOROFORGE_ALLOW_INSECURE_KEYSTORE` | Set to `1` to allow keystore files readable by group or others. |
 | `SOROFORGE_SIGNER_COMMAND` | External signing executable, for an HSM or KMS. Mutually exclusive with the seed sources. |
@@ -564,6 +585,7 @@ of an error printed mid-prompt.
 | `history import <file>` | Load an export into an empty database; `--merge` imports into a populated one. |
 | `status <alias>` | Compare the on-chain WASM hash against the recorded one. |
 | `status --all` | Drift-check every tracked contract on the network, for a single CI gate. |
+| `diff <alias>` | Show the interface change between two recorded versions, read from the network's SoroVault; `--fail-on-breaking` gates CI. |
 | `networks` | Health-check every configured RPC endpoint: responds? latency, latest ledger, passphrase match. |
 | `serve` | Run the HTTP API. |
 | `migrate up\|down\|version` | Manage the schema. |
@@ -571,8 +593,11 @@ of an error printed mid-prompt.
 
 `deploy`, `upgrade`, and `upload` accept `--dry-run` and `--notes`. `deploy`
 and `upgrade` also accept `--yes`, which skips the typed confirmation required
-on networks marked `protected: true`. They also accept `--progress`,
-`--require-spec`, and `--git-commit`, which
+on networks marked `protected: true`, and `--confirm-timeout <duration>` (for
+example `5m`), which extends how long SoroForge waits for a submitted
+transaction to reach a terminal state beyond the two-minute default. Zero and
+negative values are rejected before anything is submitted. They also accept
+`--progress`, `--require-spec`, and `--git-commit`, which
 records a source revision supplied by CI instead of detecting the current
 checkout. History displays confirmed transaction fees in stroops and XLM, plus
 the short source commit (`*` marks a dirty working tree).
@@ -614,6 +639,25 @@ Contracts are processed in alias order, and SoroForge does not infer
 dependencies between them: if one contract's constructor needs another
 contract's address, deploy them individually in the order you need.
 
+**`diff`** shows what an upgrade changed in a contract's interface. `history`
+lists WASM hashes; when the network has a `sorovault_url`, SoroVault holds the
+decoded interface of every version, and `diff` compares two of them — the last
+two recorded by default, or any pair with `--from <hash> --to <hash>`:
+
+```
+counter on testnet: 3f2a91c04b7e…  →  9c1e55d0a3f2…
+
++ fn reset(admin: Address)
+~ fn increment(by: u32) -> u32    (was: fn increment() -> u32) [breaking]
+- struct LegacyConfig             [breaking]
+```
+
+Removed or changed functions, and removed or changed types (which callers
+encode as arguments), are **breaking**; additions and event changes are not.
+`--fail-on-breaking` exits `2` when there are breaking changes, so the command
+can gate an upgrade in CI. `--json` returns the full change list. A network
+without a `sorovault_url` is an error naming it.
+
 **`status` exit codes** make it usable as a CI gate:
 
 | Code | Meaning |
@@ -623,6 +667,21 @@ contract's address, deploy them individually in the order you need.
 | `2` | Drift, untracked, missing, or archived on-chain. |
 
 The five states it reports:
+
+**`verify`** answers the question `status` cannot: is the WASM I just built
+the one that is live? It hashes the alias's local artifact and compares it with
+the tracked contract's on-chain bytecode — to confirm a rebuild is
+reproducible, or that a hotfix branch really differs from production. It needs
+no signing key, and `--json` includes both hashes.
+
+| Code | Meaning |
+|---|---|
+| `0` | Match: the local build is live. |
+| `1` | The check could not be completed, including a missing local artifact. |
+| `2` | Differs: the contract runs different bytecode. |
+| `3` | The contract is not tracked on the network, or not on-chain. |
+
+The four `status` states:
 
 - **`in_sync`** — the chain matches the record.
 - **`drift`** — the contract is running bytecode SoroForge didn't deploy.
@@ -676,6 +735,50 @@ deployment in the database, including aliases that have since left
 soroforge history export --out history.json   # or pipe stdout
 soroforge history import history.json         # empty database
 soroforge history import history.json --merge # existing records kept, duplicates skipped
+```
+
+### GitHub Action
+
+The repository is a composite action that installs a release binary — verified
+against the release's `checksums.txt` — and runs one soroforge command, so a
+workflow needs a single `uses:` line. The command's exit code is the step's,
+so `status --all` fails the job on drift.
+
+| Input | Default | Meaning |
+|---|---|---|
+| `version` | `latest` | Release to install, e.g. `v0.2.0`. `latest` is resolved through the GitHub API with the workflow token. |
+| `args` | — | The soroforge command line, e.g. `status --all`. |
+| `working-directory` | `.` | Where to run it, i.e. the directory holding `soroforge.yaml`. |
+
+Secrets are never inputs — inputs appear in the action's own step logs. Pass
+`SOROFORGE_SECRET_KEY` and `DATABASE_URL` as `env:` instead. Linux and macOS
+runners (amd64 and arm64) are supported; Windows is not.
+
+```yaml
+name: contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Builds, simulates and prints the plan without signing or submitting.
+      - uses: soroworks/soroforge@main
+        if: github.event_name == 'pull_request'
+        with:
+          version: v0.2.0
+          args: deploy --all --dry-run
+      # Exits non-zero when any tracked contract has drifted.
+      - uses: soroworks/soroforge@main
+        with:
+          version: v0.2.0
+          args: status --all
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 ```
 
 ---
@@ -911,10 +1014,32 @@ deploy — a dashboard, a monitoring job, a status page. It can call every `GET`
 route but is refused with `403` on `/v1/deploy` and `/v1/upgrade`, so a leak
 cannot become a mainnet transaction.
 
-**Not implemented, by design:** key generation, multisig or threshold signing,
-and CI plugin integrations. Hardware wallets and KMS-backed keys are supported
-through the external signer command. The `stellar.Signer` interface remains the
-extension point for signing-related work — see
+**Multisig deployer accounts:** a deployer account protected by multisig
+thresholds signs with the primary key (from any source above — its address is
+the transaction source and the recorded deployer) plus co-signers listed in
+`SOROFORGE_COSIGNER_KEYSTORES`, a path list separated like `PATH`:
+
+```bash
+export SOROFORGE_KEYSTORE_PATH=~/.soroforge/deployer        # primary
+export SOROFORGE_COSIGNER_KEYSTORES=~/.soroforge/cosigner-a:~/.soroforge/cosigner-b
+```
+
+- Co-signer seeds come from **keystore files only**, never from environment
+  variables, and each file gets the same mode-`0600` check as the primary
+  keystore. Errors name the file, never its contents.
+- A key configured twice — including the primary listed again as a
+  co-signer — is rejected before anything is built: a duplicate signature makes
+  the network refuse the transaction.
+- Co-signers without a primary key are rejected.
+- No fee margin is needed for the extra signatures: a 2-of-2 Soroban
+  transaction submits on testnet with the simulated resource fee unchanged
+  (`SOROFORGE_LIVE_MULTISIG=1 go test ./internal/stellar/ -run LiveMultisig -v`
+  reproduces it with throwaway friendbot accounts).
+
+**Not implemented, by design:** key generation and CI plugin integrations.
+Hardware wallets and KMS-backed keys are supported through the external signer
+command. The `stellar.Signer` interface remains the extension point for
+signing-related work — see
 [`internal/stellar/signer.go`](internal/stellar/signer.go).
 
 ### External signers

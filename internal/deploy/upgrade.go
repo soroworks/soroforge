@@ -24,6 +24,11 @@ type UpgradeRequest struct {
 	// ExtendTTL renews the upgraded contract's instance and code TTLs to the
 	// network's maximum after the upgrade confirms. Ignored on a dry run.
 	ExtendTTL bool `json:"extend_ttl,omitempty"`
+
+	// Actor is the identity that triggered the upgrade. For CLI this is
+	// "cli"; for API it is the token name. It is recorded in the deployment
+	// history for audit purposes.
+	Actor string `json:"-"`
 }
 
 // UpgradeResult describes a completed or simulated upgrade.
@@ -145,8 +150,14 @@ func (s *Service) resolveUpgradeHash(ctx context.Context, r resolved, input stri
 // The entrypoint name defaults to "upgrade" and is configurable per contract
 // via `upgrade_fn`.
 func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (_ *UpgradeResult, err error) {
+	if req.Actor == "" {
+		req.Actor = "cli"
+	}
 	r, err := s.resolve(req.Network, req.Alias)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkRequireNotes(r, req.Notes, req.DryRun); err != nil {
 		return nil, err
 	}
 
@@ -359,6 +370,7 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (_ *UpgradeRe
 		WasmHash:       wasmHashHex,
 		Action:         store.ActionUpgrade,
 		DeployerPubkey: signer.Address(),
+		Actor:          req.Actor,
 		TxHash:         upgrade.Hash,
 		Ledger:         upgrade.Ledger,
 		Notes:          req.Notes,
@@ -373,7 +385,7 @@ func (s *Service) Upgrade(ctx context.Context, req UpgradeRequest) (_ *UpgradeRe
 	result.Deployment = deployment
 
 	if req.ExtendTTL && !req.DryRun {
-		result.Extension, result.ExtensionError = s.extendAfterChange(ctx, r, signer, tracked, log)
+		result.Extension, result.ExtensionError = s.extendAfterChange(ctx, r, signer, tracked, req.Actor, log)
 	}
 
 	result.Catalog = s.publish(ctx, r, tracked.ContractID, log)
