@@ -123,3 +123,27 @@ func TestFunctionSignature(t *testing.T) {
 	assert.Equal(t, "fn transfer(from: Address, to: Address, amount: i128) -> Result<(), Error>",
 		FunctionSignature(fn("transfer", "Result<(), Error>", p("from", "Address"), p("to", "Address"), p("amount", "i128"))))
 }
+
+func TestFunctionSignatureWithOnlyInputsOrOutputs(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   Function
+		want string
+	}{
+		{
+			name: "no inputs with a return value",
+			fn:   fn("count", "u32"),
+			want: "fn count() -> u32",
+		},
+		{
+			name: "nested input type without a return value",
+			fn:   fn("record", "", p("entries", "Vec<Option<Address>>")),
+			want: "fn record(entries: Vec<Option<Address>>)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, FunctionSignature(tc.fn))
+		})
+	}
+}
