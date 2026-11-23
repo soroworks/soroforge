@@ -543,7 +543,7 @@ func scanDeployment(s scanner) (Deployment, error) {
 		d.TxHash = *txHash
 	}
 	if ledger != nil {
-		d.Ledger = uint32(*ledger)
+		d.Ledger = uint32(*ledger) //nolint:gosec // G115: the column is only ever written from a uint32 ledger
 	}
 	if txGitCommit != nil {
 		d.GitCommit = *txGitCommit

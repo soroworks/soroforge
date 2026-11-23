@@ -384,6 +384,14 @@ Each webhook receives a POST request with a JSON payload (`alias`, `network`,
 in the `X-SoroForge-Signature` header (`sha256=<hex>`). Delivery is best-effort with
 a timeout: a failing webhook never fails the deploy. Dry runs never trigger webhooks.
 
+Transient failures (5xx, 429, and network errors) are retried up to four attempts
+in total, with exponential backoff (0.5s, 1s, 2s) and jitter. A `Retry-After` header on a
+429 or 503 is honoured, capped at 10s, and the whole delivery is bounded at 30s so
+an unreachable receiver cannot stall the deploy result. Other 4xx responses are
+not retried. Every retry carries the same body and signature, so receivers should
+treat deliveries as at-least-once and de-duplicate on `tx_hash`. The deploy result
+reports the number of attempts per webhook.
+
 **Contracts.** `wasm` paths resolve against the config file's directory, not your
 shell's working directory, so `soroforge deploy` behaves the same from anywhere.
 
@@ -502,7 +510,8 @@ contracts:
 | `DATABASE_URL` | History database: `postgres://...` or `sqlite:///path/to/file.db`. Required except for `deploy --dry-run`. |
 | `SOROFORGE_SECRET_KEY` | Deployer secret seed (`S...`). |
 | `SOROFORGE_COSIGNER_KEYSTORES` | Path list (separated like `PATH`) of co-signer keystore files, for a multisig deployer account. See [Security notes](#security-notes-on-key-handling). |
-| `SOROFORGE_KEYSTORE_PATH` | Path to a file containing only the seed. |
+| `SOROFORGE_KEYSTORE_PATH` | Path to a file containing only the seed, or an encrypted keystore from `soroforge keys encrypt`. |
+| `SOROFORGE_KEYSTORE_PASSPHRASE` | Passphrase for encrypted keystores (primary and co-signer). When unset, SoroForge prompts on a terminal without echo. |
 | `SOROFORGE_ALLOW_INSECURE_KEYSTORE` | Set to `1` to allow keystore files readable by group or others. |
 | `SOROFORGE_SIGNER_COMMAND` | External signing executable, for an HSM or KMS. Mutually exclusive with the seed sources. |
 | `SOROFORGE_SIGNER_PUBLIC_KEY` | The `G...` address `SOROFORGE_SIGNER_COMMAND` signs for. |
@@ -857,6 +866,7 @@ than IDs or raw paths.
 | `POST` | `/v1/deploy` | write | `{"alias","network","notes","dry_run","git_commit","require_spec"}` → `201` (`200` for a dry run). Add `?async=true` for a job. |
 | `POST` | `/v1/upgrade` | write | Same body → `200`. Add `?async=true` for a job. |
 | `GET` | `/v1/jobs/{id}` | read | Async job state and, when finished, its result. |
+| `GET` | `/v1/networks` | read | RPC health for every configured network: reachability, latency, latest ledger, and passphrase verdict. URLs are credential-redacted and results are cached briefly. |
 | `GET` | `/v1/contracts?network=&limit=&offset=` | read | Tracked contracts, paginated (default limit 100, maximum 500). |
 | `GET` | `/v1/contracts/{network}/{alias}/history?limit=&offset=` | read | Deployment history, paginated (default limit 100, maximum 500). |
 | `GET` | `/v1/contracts/{network}/{alias}/status` | read | Drift check. |
@@ -1010,10 +1020,30 @@ is skipped there. Environments that mount secrets at a fixed mode the operator
 cannot change can set `SOROFORGE_ALLOW_INSECURE_KEYSTORE=1` to accept the risk
 deliberately — the permission error itself names that option.
 
+**Encrypted keystores:** a plain keystore is protected only by its file mode,
+so anything that can read the file — a backup, a misconfigured mount — has the
+key. `soroforge keys encrypt <file>` seals the seed under a passphrase
+(argon2id key derivation, XChaCha20-Poly1305) and replaces the file in place,
+or writes to `--output` and leaves the original for you to delete:
+
+```bash
+soroforge keys encrypt ~/.soroforge/deployer     # prompts twice, no echo
+```
+
+Encrypted keystores are detected automatically wherever
+`SOROFORGE_KEYSTORE_PATH` or `SOROFORGE_COSIGNER_KEYSTORES` is read, and plain
+keystores keep working. The passphrase comes from
+`SOROFORGE_KEYSTORE_PASSPHRASE`, or from a no-echo prompt when stdin is a
+terminal; without either, the command fails with an error naming the variable
+rather than waiting for input. A wrong passphrase is reported as such, and
+neither the passphrase nor the seed is logged. The permission check still
+applies to encrypted files. The file format is a versioned JSON document,
+described in [`internal/keyseal/keyseal.go`](internal/keyseal/keyseal.go).
+
 **Recommendations:**
 
-- Prefer a **keystore file** locally, at mode `0600`. Environment variables are
-  readable by every child process and land in shell history.
+- Prefer an **encrypted keystore file** locally, at mode `0600`. Environment
+  variables are readable by every child process and land in shell history.
 - Use your CI provider's secret store for `SOROFORGE_SECRET_KEY`. Don't commit
   `.env` — it's gitignored, keep it that way.
 - Use a **separate key per network**. A mainnet deploy key shouldn't be on a

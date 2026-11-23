@@ -199,7 +199,7 @@ func runBuild(cmd *cobra.Command, dir, alias, command string) error {
 	if strings.TrimSpace(command) == "" {
 		return nil
 	}
-	c := exec.CommandContext(cmd.Context(), "sh", "-c", command)
+	c := exec.CommandContext(cmd.Context(), "sh", "-c", command) //nolint:gosec // G204: running the configured build command is the feature
 	c.Dir = dir
 	c.Stdout, c.Stderr = cmd.OutOrStdout(), cmd.ErrOrStderr()
 	if err := c.Run(); err != nil {

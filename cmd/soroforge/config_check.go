@@ -63,7 +63,7 @@ func checkConfig(
 	for _, alias := range contracts {
 		contract := cfg.Contracts[alias]
 		path := cfg.WasmPath(contract)
-		wasm, err := os.ReadFile(path)
+		wasm, err := os.ReadFile(path) //nolint:gosec // G304: WASM path comes from the operator's own soroforge.yaml
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("contracts.%s.wasm: read %s: %v", alias, path, err))
 			continue

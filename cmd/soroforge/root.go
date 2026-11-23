@@ -47,7 +47,11 @@ Configuration lives in soroforge.yaml. Secrets come from the environment:
 
   DATABASE_URL             Postgres connection string
   SOROFORGE_SECRET_KEY     deployer secret seed (S...), or
-  SOROFORGE_KEYSTORE_PATH  path to a file containing the seed
+  SOROFORGE_KEYSTORE_PATH  path to a file containing the seed, plain or
+                           encrypted with "soroforge keys encrypt"
+  SOROFORGE_KEYSTORE_PASSPHRASE
+                           passphrase for an encrypted keystore (prompted
+                           for on a terminal when unset)
 
 To keep the key outside this process, set SOROFORGE_SIGNER_COMMAND to a signing
 executable (for an HSM or KMS) and SOROFORGE_SIGNER_PUBLIC_KEY to the G...
@@ -83,6 +87,7 @@ the README security notes.`,
 		newRestoreCmd(),
 		newFundCmd(),
 		newWhoAmICmd(),
+		newKeysCmd(),
 		newTrackCmd(),
 		newListCmd(),
 		newHistoryCmd(),
@@ -286,6 +291,15 @@ func loadEnvOnly() config.Env { return config.LoadEnv() }
 // Env.ValidateSigningConfig rejects configuring both, so a key file on a
 // workstation cannot silently sign a deploy that was meant for an HSM.
 func buildSigner(cfg *config.Config, required bool) (stellar.Signer, error) {
+	// An encrypted keystore needs a passphrase. Offer a no-echo prompt only
+	// when someone is at a terminal; otherwise SOROFORGE_KEYSTORE_PASSPHRASE
+	// must supply it, and its absence is a clear error rather than a hang.
+	if cfg.Env.PromptPassphrase == nil && passphraseIsTerminal() {
+		cfg.Env.PromptPassphrase = func(path string) (string, error) {
+			return readPassphrase(fmt.Sprintf("Passphrase for %s: ", path))
+		}
+	}
+
 	primary, err := buildPrimarySigner(cfg, required)
 	if err != nil || primary == nil {
 		return primary, err

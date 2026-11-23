@@ -83,6 +83,28 @@ jobs:
       - name: Test
         run: go test ${{ matrix.race }} -count=1 ./...
 
+  lint:
+    # One Linux leg is enough: the linters analyse source, not the platform.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          check-latest: true
+
+      # The linter version is pinned here and in the Makefile
+      # (GOLANGCI_LINT_VERSION); bump both together so `make lint` and CI
+      # report the same findings. Configuration lives in .golangci.yml.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+
   integration:
     name: postgres integration
     # Deliberately Linux-only: service containers are a GitHub Actions
@@ -223,7 +245,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
       - name: Helm lint
         run: helm lint deploy/helm/soroforge
       - name: Helm template

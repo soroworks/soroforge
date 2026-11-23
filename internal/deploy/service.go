@@ -389,13 +389,20 @@ func (s *Service) notifyWebhooks(ctx context.Context, network config.Network, pa
 	var results []WebhookStatus
 	for _, wh := range network.Webhooks {
 		status := WebhookStatus{URL: wh.URL}
-		if err := s.webhooks.Send(ctx, wh, payload); err != nil {
+		var err error
+		if counting, ok := s.webhooks.(AttemptCountingSender); ok {
+			status.Attempts, err = counting.Deliver(ctx, wh, payload)
+		} else {
+			status.Attempts = 1
+			err = s.webhooks.Send(ctx, wh, payload)
+		}
+		if err != nil {
 			status.OK = false
 			status.Error = err.Error()
-			log.Warn("webhook delivery failed", "url", wh.URL, "error", err)
+			log.Warn("webhook delivery failed", "url", wh.URL, "attempts", status.Attempts, "error", err)
 		} else {
 			status.OK = true
-			log.Info("webhook delivered", "url", wh.URL)
+			log.Info("webhook delivered", "url", wh.URL, "attempts", status.Attempts)
 		}
 		results = append(results, status)
 	}
@@ -738,7 +745,7 @@ func submissionRetryDelay(attempt int) time.Duration {
 		}
 	}
 	half := delay / 2
-	return half + time.Duration(rand.Int63n(int64(delay)))
+	return half + time.Duration(rand.Int63n(int64(delay))) //nolint:gosec // G404: retry jitter, not security-sensitive
 }
 
 func waitForRetry(ctx context.Context, delay time.Duration) error {

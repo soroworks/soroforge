@@ -509,7 +509,7 @@ func scanSQLiteDeployment(s rowScanner) (Deployment, error) {
 		d.TxHash = txHash.String
 	}
 	if ledger.Valid {
-		d.Ledger = uint32(ledger.Int64)
+		d.Ledger = uint32(ledger.Int64) //nolint:gosec // G115: the column is only ever written from a uint32 ledger
 	}
 	if notes.Valid {
 		d.Notes = notes.String
@@ -641,7 +641,7 @@ func (s *SQLite) RenameContract(ctx context.Context, network, oldAlias, newAlias
 	// Check if new alias already exists.
 	var exists int
 	err = tx.QueryRowContext(ctx, `SELECT 1 FROM contracts WHERE network = ? AND alias = ?`, network, newAlias).Scan(&exists)
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		if err != nil {
 			return fmt.Errorf("rename contract: check new alias exists: %w", err)
 		}

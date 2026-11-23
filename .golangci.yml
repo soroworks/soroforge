@@ -1,0 +1,68 @@
+# golangci-lint configuration (v2 format).
+#
+# The version is pinned in two places that must stay in sync: GOLANGCI_LINT_VERSION
+# in the Makefile (used by `make lint`) and the lint job in
+# .github/workflows/ci.yml. Bump both together.
+#
+# Suppress a finding only with a targeted directive and a reason:
+#
+#   //nolint:gosec // G304: path comes from the operator's own config
+version: "2"
+
+run:
+  # Lint test files too: they handle keys and HTTP bodies just like
+  # production code, and a bad pattern there gets copied.
+  tests: true
+
+linters:
+  # The defaults: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    # Security problems (weak crypto, file inclusion, permissive modes) in
+    # code that reads signing keys and talks to the network.
+    - gosec
+    # Unclosed HTTP response bodies leak connections in the RPC, webhook and
+    # friendbot clients.
+    - bodyclose
+    # Wrapped errors compared with == or type-asserted break errors.Is/As.
+    - errorlint
+    # Misspelled words in comments and strings. No locale is set: the code
+    # base uses British spelling (behaviour, honour) deliberately.
+    - misspell
+    # Redundant type conversions that hide what a value really is.
+    - unconvert
+    # Fail on //nolint directives that are unused, unexplained or untargeted.
+    - nolintlint
+
+  settings:
+    errcheck:
+      # Ignoring an error from fmt.Fprint* to a terminal or buffer is
+      # conventional; flagging it would bury real findings.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    gosec:
+      excludes:
+        # G104 duplicates errcheck.
+        - G104
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    # Standard golangci-lint exclusions for well-known false positives.
+    presets:
+      - std-error-handling
+    rules:
+      # Tests write fixtures to t.TempDir() and read paths they built
+      # themselves; G304/G306 there are noise, not findings.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G(101|204|301|302|304|306|703)"
+
+formatters:
+  enable:
+    # Same check CI already enforces with `gofmt -l .`.
+    - gofmt

@@ -250,7 +250,7 @@ where ` + "`soroforge history export > history.json`" + ` does the rest.`,
 			}
 			// 0644: the file is history data, not a secret — it holds only
 			// public addresses and hashes by construction.
-			if err := os.WriteFile(outPath, data, 0o644); err != nil {
+			if err := os.WriteFile(outPath, data, 0o644); err != nil { //nolint:gosec // G306: exported history holds only public data, see comment above
 				return fmt.Errorf("write history file: %w", err)
 			}
 			fmt.Fprintf(out(), "Exported %d contract(s) and %d deployment(s) to %s.\n",

@@ -74,7 +74,7 @@ func TestAssembleAppliesSorobanDataAndResourceFee(t *testing.T) {
 	require.NoError(t, err)
 
 	// One operation at MinBaseFee, plus the resource fee.
-	assert.Equal(t, uint32(txnbuild.MinBaseFee+resourceFee), uint32(assembled.ToXDR().Fee()))
+	assert.Equal(t, uint32(txnbuild.MinBaseFee+resourceFee), assembled.ToXDR().Fee())
 	assert.Greater(t, assembled.ToXDR().Fee(), before)
 
 	// The Soroban data must be attached to the operation's transaction ext,

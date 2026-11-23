@@ -152,7 +152,7 @@ func (s *CommandSigner) signHash(hash [32]byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, s.command, s.args...)
+	cmd := exec.CommandContext(ctx, s.command, s.args...) //nolint:gosec // G204: running the configured signer command is the feature
 	cmd.Stdin = bytes.NewReader(request)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

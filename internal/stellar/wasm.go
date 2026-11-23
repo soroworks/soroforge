@@ -74,11 +74,11 @@ func HasContractSpec(wasm []byte) (bool, error) {
 			return false, fmt.Errorf("section %d: read size: %w", sectionID, err)
 		}
 		offset += n
-		if size > uint64(len(wasm)-offset) {
+		if size > uint64(len(wasm)-offset) { //nolint:gosec // G115: len(wasm)-offset is never negative here
 			return false, fmt.Errorf(
 				"section %d claims %d bytes but only %d remain", sectionID, size, len(wasm)-offset)
 		}
-		payload := wasm[offset : offset+int(size)]
+		payload := wasm[offset : offset+int(size)] //nolint:gosec // G115: size was bounded by len(wasm)-offset just above
 
 		if sectionID == customSectionID {
 			present, err := customSectionIsSpec(payload)
@@ -90,7 +90,7 @@ func HasContractSpec(wasm []byte) (bool, error) {
 			}
 		}
 
-		offset += int(size)
+		offset += int(size) //nolint:gosec // G115: size was bounded by len(wasm)-offset above
 	}
 	return false, nil
 }

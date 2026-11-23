@@ -111,7 +111,7 @@ var argTypeRegistry []argTypeEntry
 // package variables are set, so the registration order is still deterministic
 // and the cycle cannot form.
 func init() {
-	for _, entry := range []argTypeEntry{
+	argTypeRegistry = append(argTypeRegistry, []argTypeEntry{
 		{ArgBool, encodeBool},
 		{ArgVoid, encodeVoid},
 		{ArgU32, encodeU32},
@@ -132,9 +132,7 @@ func init() {
 		{ArgVec, encodeVec},
 		{ArgMap, encodeMap},
 		{ArgXDR, encodeXDR},
-	} {
-		argTypeRegistry = append(argTypeRegistry, entry)
-	}
+	}...)
 	for _, entry := range argTypeRegistry {
 		SupportedArgTypes = append(SupportedArgTypes, entry.name)
 	}
@@ -186,7 +184,7 @@ func encodeU32(a Arg) (xdr.ScVal, error) {
 	if err != nil {
 		return xdr.ScVal{}, err
 	}
-	v := xdr.Uint32(n)
+	v := xdr.Uint32(n) //nolint:gosec // G115: asUint(32) has already range-checked n
 	return xdr.ScVal{Type: xdr.ScValTypeScvU32, U32: &v}, nil
 }
 
@@ -195,7 +193,7 @@ func encodeI32(a Arg) (xdr.ScVal, error) {
 	if err != nil {
 		return xdr.ScVal{}, err
 	}
-	v := xdr.Int32(n)
+	v := xdr.Int32(n) //nolint:gosec // G115: asInt(32) has already range-checked n
 	return xdr.ScVal{Type: xdr.ScValTypeScvI32, I32: &v}, nil
 }
 
@@ -481,7 +479,7 @@ func ParseArgsJSON(raw []byte) ([]Arg, error) {
 // working directory, not the config file, because the user named it on the
 // command line.
 func ParseArgsFile(path string) ([]Arg, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: the operator names the args file on the command line
 	if err != nil {
 		return nil, fmt.Errorf("read args file %s: %w", path, err)
 	}

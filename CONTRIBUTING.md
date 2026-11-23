@@ -18,6 +18,13 @@ make test
 `make test` requires neither a network nor a database. If it needs either,
 something has regressed — please report it.
 
+**Example:** After cloning the repo, build and run the unit tests:
+
+```bash
+make build
+make test
+```
+
 ### Dev container (optional)
 
 The repository ships a [dev container](.devcontainer/) with Go 1.26, Postgres
@@ -35,6 +42,13 @@ the integration suite runs without any other setup. A local Go install and
 Docker compose still work exactly as described below — the dev container is a
 convenience, not a requirement.
 
+**Example:** Common dev container workflow — run checks and unit tests:
+
+```bash
+make check
+make test
+```
+
 For the full suite:
 
 ```bash
@@ -48,6 +62,7 @@ Before opening a pull request:
 
 ```bash
 make check    # fmt, vet, test
+make lint     # golangci-lint at the version CI pins
 ```
 
 ## How the code is organised
@@ -152,6 +167,11 @@ it.
 ## Style
 
 - Standard Go. `gofmt` is enforced by `make check`.
+- `make lint` runs golangci-lint with `.golangci.yml`, at the same pinned
+  version as CI (via `go run`, so nothing needs installing). Fix findings rather
+  than suppressing them; when a finding is a false positive, suppress only that
+  line with `//nolint:<linter> // reason`. A bare or unexplained `//nolint` is
+  itself a lint error.
 - Use `log/slog` for logging. Never log key material.
 - Comments should explain *why*, not restate the code. The tricky parts of this
   codebase — manual transaction assembly, the two-transaction deploy, comparing

@@ -295,7 +295,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	raw, err := os.ReadFile(resolved)
+	raw, err := os.ReadFile(resolved) //nolint:gosec // G304: reading the operator's chosen config file is the point
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", resolved, err)
 	}

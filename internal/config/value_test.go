@@ -204,3 +204,51 @@ func TestAsUintRejectsNegativeAndOverflow(t *testing.T) {
 		})
 	}
 }
+
+func TestValueDecodeEdgeCases(t *testing.T) {
+	tests := map[string]struct {
+		yaml    string // document holding `value:`; empty means the field is absent
+		decode  func(Value) error
+		wantErr string
+	}{
+		"absent value": {
+			yaml:    "",
+			decode:  func(v Value) error { var s string; return v.Decode(&s) },
+			wantErr: "missing value",
+		},
+		"uint64 boundary decodes exactly": {
+			yaml: "value: 18446744073709551615",
+			decode: func(v Value) error {
+				var n uint64
+				if err := v.Decode(&n); err != nil {
+					return err
+				}
+				if n != math.MaxUint64 {
+					return assert.AnError
+				}
+				return nil
+			},
+		},
+		"list into a scalar is rejected": {
+			yaml:    "value: [1, 2]",
+			decode:  func(v Value) error { var n int; return v.Decode(&n) },
+			wantErr: "cannot unmarshal",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var doc struct {
+				Value Value `yaml:"value"`
+			}
+			require.NoError(t, yaml.Unmarshal([]byte(tc.yaml), &doc))
+
+			err := tc.decode(doc.Value)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}

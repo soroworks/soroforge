@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/soroworks/soroforge/internal/api"
 	"github.com/soroworks/soroforge/internal/deploy"
+	"github.com/soroworks/soroforge/internal/netcheck"
 	"github.com/soroworks/soroforge/internal/readiness"
 	"github.com/soroworks/soroforge/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -27,32 +28,27 @@ const (
 	testReadOnlyToken = "read-only-token-long-enough"
 )
 
-// Rotation tests need two distinct tokens and one that matches neither.
-const (
-	testTokenA = "test-token-rotation-old-0001"
-	testTokenB = "test-token-rotation-new-0002"
-	testTokenC = "test-token-rotation-nope-0003"
-)
-
 // fakeService records calls and returns canned results, so the handlers are
 // tested for what they do with HTTP rather than for lifecycle behaviour — that
 // is covered in the deploy package.
 type fakeService struct {
-	deployResult  *deploy.DeployResult
-	upgradeResult *deploy.UpgradeResult
-	statusResult  *deploy.StatusResult
-	networkStatus *deploy.NetworkStatus
-	contracts     []store.Contract
-	deployments   []store.Deployment
-	err           error
+	deployResult   *deploy.DeployResult
+	upgradeResult  *deploy.UpgradeResult
+	statusResult   *deploy.StatusResult
+	networkStatus  *deploy.NetworkStatus
+	networkResults []netcheck.Result
+	contracts      []store.Contract
+	deployments    []store.Deployment
+	err            error
 
-	lastDeploy  deploy.DeployRequest
-	lastUpgrade deploy.UpgradeRequest
-	lastStatus  deploy.StatusRequest
-	lastNetwork string
-	lastAlias   string
-	lastLimit   int
-	lastOffset  int
+	lastDeploy    deploy.DeployRequest
+	lastUpgrade   deploy.UpgradeRequest
+	lastStatus    deploy.StatusRequest
+	lastNetwork   string
+	lastAlias     string
+	lastLimit     int
+	lastOffset    int
+	networkChecks int
 
 	// calls counts mutating operations, so tests can prove that a rejected
 	// request never reached the service.
@@ -103,6 +99,11 @@ func (f *fakeService) StatusAll(_ context.Context, network string) (*deploy.Netw
 		return nil, f.err
 	}
 	return f.networkStatus, nil
+}
+
+func (f *fakeService) CheckNetworks(_ context.Context) []netcheck.Result {
+	f.networkChecks++
+	return f.networkResults
 }
 
 func (f *fakeService) List(_ context.Context, network string) ([]store.Contract, error) {
@@ -429,6 +430,7 @@ func TestReadEndpointsAlsoRequireAuth(t *testing.T) {
 		"/v1/contracts/testnet/counter/history",
 		"/v1/contracts/testnet/counter/status",
 		"/v1/jobs/some-job",
+		"/v1/networks",
 		"/v1/deployments/1",
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -482,6 +484,7 @@ func TestReadOnlyTokenReadsEveryReadRoute(t *testing.T) {
 		"/v1/contracts/testnet/counter/history",
 		"/v1/contracts/testnet/counter/status",
 		"/v1/contracts/testnet/status",
+		"/v1/networks",
 		"/v1/deployments/1",
 	} {
 		t.Run(path, func(t *testing.T) {

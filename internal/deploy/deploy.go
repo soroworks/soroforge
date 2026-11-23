@@ -669,7 +669,7 @@ func (s *Service) record(ctx context.Context, d store.Deployment) (*store.Deploy
 // readWasm loads a contract's compiled artifact.
 func (s *Service) readWasm(c config.Contract) ([]byte, error) {
 	path := s.cfg.WasmPath(c)
-	wasm, err := os.ReadFile(path)
+	wasm, err := os.ReadFile(path) //nolint:gosec // G304: WASM path comes from the operator's own soroforge.yaml
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("wasm artifact not found at %s (has the contract been built?)", path)

@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/soroworks/soroforge/internal/config"
 	"github.com/soroworks/soroforge/internal/deploy"
+	"github.com/soroworks/soroforge/internal/netcheck"
 	"github.com/soroworks/soroforge/internal/readiness"
 	"github.com/soroworks/soroforge/internal/store"
 )
@@ -43,6 +45,7 @@ type Service interface {
 	Track(ctx context.Context, req deploy.TrackRequest) (*deploy.TrackResult, error)
 	Status(ctx context.Context, req deploy.StatusRequest) (*deploy.StatusResult, error)
 	StatusAll(ctx context.Context, network string) (*deploy.NetworkStatus, error)
+	CheckNetworks(ctx context.Context) []netcheck.Result
 	ListPage(ctx context.Context, network string, limit, offset int) ([]store.Contract, error)
 	HistoryPage(ctx context.Context, network, alias string, limit, offset int) ([]store.Deployment, error)
 	GetDeployment(ctx context.Context, id int64) (store.Deployment, error)
@@ -84,6 +87,10 @@ const maxRequestBodyBytes = 64 << 10 // 64 KiB
 // waiting out an hour-long cache.
 const preflightMaxAge = 10 * time.Minute
 
+// DefaultNetworksCacheTTL is how long GET /v1/networks reuses a probe report so
+// repeated dashboard calls cannot hammer configured RPC endpoints.
+const DefaultNetworksCacheTTL = 5 * time.Second
+
 // Options configures the HTTP server.
 type Options struct {
 	// Service performs the work. Required.
@@ -121,6 +128,14 @@ type Options struct {
 	// MetricsEnabled exposes the authenticated Prometheus endpoint at /metrics.
 	// It is disabled by default.
 	MetricsEnabled bool
+
+	// NetworksCacheTTL bounds how long GET /v1/networks caches RPC probe
+	// results. Defaults to DefaultNetworksCacheTTL.
+	NetworksCacheTTL time.Duration
+
+	// Now supplies the clock for cache expiry, so tests do not sleep. Defaults
+	// to time.Now.
+	Now func() time.Time
 }
 
 // route is one endpoint, the scope a token must hold to call it, and its
@@ -154,6 +169,7 @@ func (h *handlers) routes() []route {
 		{http.MethodPost, "/v1/track", ScopeWrite, h.track},
 
 		{http.MethodGet, "/v1/jobs/{id}", ScopeRead, h.job},
+		{http.MethodGet, "/v1/networks", ScopeRead, h.networks},
 
 		{http.MethodGet, "/v1/contracts", ScopeRead, h.listContracts},
 		{http.MethodGet, "/v1/contracts/{network}/{alias}/history", ScopeRead, h.history},
@@ -199,11 +215,22 @@ func NewRouter(opts Options) (http.Handler, error) {
 		log = slog.Default()
 	}
 
+	networksTTL := opts.NetworksCacheTTL
+	if networksTTL <= 0 {
+		networksTTL = DefaultNetworksCacheTTL
+	}
+	nowFn := opts.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+
 	h := &handlers{
-		svc:       opts.Service,
-		readiness: opts.Readiness,
-		log:       log,
-		jobs:      newJobManager(opts.JobRetention, log),
+		svc:         opts.Service,
+		readiness:   opts.Readiness,
+		log:         log,
+		jobs:        newJobManager(opts.JobRetention, log),
+		networksTTL: networksTTL,
+		now:         nowFn,
 	}
 	if opts.MetricsEnabled {
 		h.metrics = newAPIMetrics(h.jobs)
@@ -336,6 +363,12 @@ type handlers struct {
 	log       *slog.Logger
 	jobs      *jobManager
 	metrics   *apiMetrics
+
+	networksMu     sync.Mutex
+	networksTTL    time.Duration
+	now            func() time.Time
+	cachedNetworks *NetworksResponse
+	networksExpiry time.Time
 }
 
 // errorResponse is the body returned for every failure, so clients can parse

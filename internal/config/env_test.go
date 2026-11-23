@@ -119,6 +119,61 @@ func TestParseCORSOrigins(t *testing.T) {
 	})
 }
 
+func TestValidateCORSOrigin(t *testing.T) {
+	tests := map[string]struct {
+		origin  string
+		wantErr string
+	}{
+		"https origin": {
+			origin: "https://dash.example.com",
+		},
+		"http origin with a port": {
+			origin: "http://localhost:3000",
+		},
+		"wildcard is rejected": {
+			origin:  "*",
+			wantErr: `must not contain "*"`,
+		},
+		"wildcard subdomain is rejected": {
+			origin:  "https://*.example.com",
+			wantErr: `must not contain "*"`,
+		},
+		"empty origin is rejected": {
+			origin:  "",
+			wantErr: "not a valid origin",
+		},
+		"non-http scheme is rejected": {
+			origin:  "ftp://dash.example.com",
+			wantErr: "not a valid origin",
+		},
+		"missing host is rejected": {
+			origin:  "https://",
+			wantErr: "not a valid origin",
+		},
+		"path is rejected": {
+			origin:  "https://dash.example.com/app",
+			wantErr: "not a valid origin",
+		},
+		"trailing slash is rejected": {
+			origin:  "https://dash.example.com/",
+			wantErr: "not a valid origin",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := ValidateCORSOrigin(tc.origin)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, EnvAPICORSOrigins)
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
 func TestListenAddrDefaultsToLoopback(t *testing.T) {
 	// The process holds a signing key; exposing it beyond loopback should be a
 	// deliberate act, not a default.
@@ -388,6 +443,27 @@ func TestHasSigningKey(t *testing.T) {
 	assert.True(t, Env{SignerCommand: "/bin/sign", SignerPublicKey: "GABC"}.HasSigningKey())
 }
 
+func TestHasSigningKeyEdgeCases(t *testing.T) {
+	tests := map[string]struct {
+		env  Env
+		want bool
+	}{
+		// A public key identifies a signer but cannot sign on its own.
+		"public key only": {env: Env{SignerPublicKey: "GABC"}, want: false},
+		// Co-signers sign alongside a primary key, never instead of it.
+		"cosigner keystores only": {env: Env{CosignerKeystores: "/keys/cosigner"}, want: false},
+		// A command counts as a key source even before ValidateSigningConfig
+		// has checked that its public key is present.
+		"signer command without public key": {env: Env{SignerCommand: "/bin/sign"}, want: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.env.HasSigningKey())
+		})
+	}
+}
+
 func TestValidateSigningConfig(t *testing.T) {
 	tests := map[string]struct {
 		env     Env
@@ -420,6 +496,17 @@ func TestValidateSigningConfig(t *testing.T) {
 		"external signer and a keystore": {
 			env:     Env{SignerCommand: "/usr/local/bin/sign", SignerPublicKey: "GABC", KeystorePath: "/k"},
 			wantErr: "cannot be combined",
+		},
+		"cosigners without a primary key": {
+			env:     Env{CosignerKeystores: "/keys/cosigner"},
+			wantErr: EnvCosignerKeystores,
+		},
+		"cosigners alongside an external signer": {
+			env: Env{CosignerKeystores: "/keys/cosigner", SignerCommand: "/usr/local/bin/sign", SignerPublicKey: "GABC"},
+		},
+		"public key next to a seed but no command": {
+			env:     Env{SecretKey: "SABC", SignerPublicKey: "GABC"},
+			wantErr: EnvSignerCommand,
 		},
 	}
 

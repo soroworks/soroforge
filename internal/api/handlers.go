@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/soroworks/soroforge/internal/deploy"
+	"github.com/soroworks/soroforge/internal/netcheck"
 	"github.com/soroworks/soroforge/internal/store"
 )
 
@@ -397,4 +398,46 @@ func (h *handlers) getDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, deployment)
+}
+
+// NetworksResponse is the JSON payload returned by GET /v1/networks, matching
+// the structure of `soroforge networks --json`.
+type NetworksResponse struct {
+	Networks []netcheck.Result `json:"networks"`
+	AllOK    bool              `json:"all_ok"`
+}
+
+// networks handles GET /v1/networks.
+//
+// Like statusAll, an unreachable endpoint or passphrase mismatch is reported as
+// a 200 with all_ok: false and per-network details rather than a 5xx, because
+// the probe ran and produced its diagnostic report. Results are cached briefly
+// under networksMu so repeated dashboard polls cannot hammer RPC providers.
+func (h *handlers) networks(w http.ResponseWriter, r *http.Request) {
+	h.networksMu.Lock()
+	now := h.now()
+	if h.cachedNetworks != nil && now.Before(h.networksExpiry) {
+		cached := *h.cachedNetworks
+		h.networksMu.Unlock()
+		writeJSON(w, http.StatusOK, cached)
+		return
+	}
+
+	results := h.svc.CheckNetworks(r.Context())
+	if results == nil {
+		results = []netcheck.Result{}
+	}
+	report := NetworksResponse{
+		Networks: results,
+		AllOK:    !netcheck.AnyFailure(results),
+	}
+	// A canceled request produced a partial probe; do not let that answer
+	// satisfy later requests for the whole TTL.
+	if r.Context().Err() == nil {
+		h.cachedNetworks = &report
+		h.networksExpiry = h.now().Add(h.networksTTL)
+	}
+	h.networksMu.Unlock()
+
+	writeJSON(w, http.StatusOK, report)
 }

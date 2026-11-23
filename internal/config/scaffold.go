@@ -144,7 +144,7 @@ func WriteScaffold(dir, path string, force bool) ([]FoundContract, error) {
 	if force {
 		flag = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
-	f, err := os.OpenFile(path, flag, 0o644)
+	f, err := os.OpenFile(path, flag, 0o644) //nolint:gosec // G302: soroforge.yaml holds no secrets and is meant to be committed
 	if err != nil {
 		if os.IsExist(err) {
 			return nil, fmt.Errorf("%s already exists; pass --force to replace it", path)

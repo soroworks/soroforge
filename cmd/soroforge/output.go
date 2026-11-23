@@ -615,6 +615,8 @@ func printWebhooks(w io.Writer, webhooks []deploy.WebhookStatus) {
 	for _, wh := range webhooks {
 		if !wh.OK {
 			fmt.Fprintf(w, "  Webhook       failed (%s): %s\n", wh.URL, wh.Error)
+		} else if wh.Attempts > 1 {
+			fmt.Fprintf(w, "  Webhook       delivered to %s (after %d attempts)\n", wh.URL, wh.Attempts)
 		} else {
 			fmt.Fprintf(w, "  Webhook       delivered to %s\n", wh.URL)
 		}

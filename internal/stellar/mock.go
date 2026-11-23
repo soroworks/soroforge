@@ -472,7 +472,7 @@ func NewMockSigner() *MockSigner {
 func NewMockSignerFromSeed(seed string) (*MockSigner, error) {
 	full, err := keypair.ParseFull(seed)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse mock signing key: invalid Stellar secret seed (expected an S... value)")
 	}
 	return &MockSigner{full: full}, nil
 }

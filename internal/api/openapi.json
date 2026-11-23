@@ -129,6 +129,17 @@
         }
       }
     },
+    "/v1/networks": {
+      "get": {
+        "operationId": "listNetworks",
+        "summary": "Check RPC reachability, latency, latest ledger and passphrase verdict for every configured network",
+        "responses": {
+          "200": { "description": "Credential-redacted RPC health report across configured networks", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NetworksReport" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
     "/v1/contracts": {
       "get": {
         "operationId": "listContracts",
@@ -344,6 +355,30 @@
         "ready": { "type": "boolean" }, "dependencies": { "type": "array", "items": { "type": "object", "required": ["name", "ok"], "properties": {
           "name": { "type": "string" }, "ok": { "type": "boolean" }, "error": { "type": "string" }
         } } } }
+      },
+      "NetworkHealth": {
+        "type": "object",
+        "required": ["network", "rpc_url", "responded", "latency_ns", "passphrase_verified", "passphrase_match", "ok"],
+        "properties": {
+          "network": { "type": "string" },
+          "rpc_url": { "type": "string", "description": "Configured RPC URL with userinfo and query-string credentials removed." },
+          "responded": { "type": "boolean" },
+          "latency_ns": { "type": "integer", "format": "int64" },
+          "latest_ledger": { "type": "integer", "minimum": 0 },
+          "reported_passphrase": { "type": "string" },
+          "passphrase_verified": { "type": "boolean" },
+          "passphrase_match": { "type": "boolean" },
+          "error": { "type": "string" },
+          "ok": { "type": "boolean" }
+        }
+      },
+      "NetworksReport": {
+        "type": "object",
+        "required": ["networks", "all_ok"],
+        "properties": {
+          "networks": { "type": "array", "items": { "$ref": "#/components/schemas/NetworkHealth" } },
+          "all_ok": { "type": "boolean" }
+        }
       }
     }
   }

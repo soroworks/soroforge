@@ -227,7 +227,7 @@ func (v Value) asInt128() (xdr.Int128Parts, error) {
 	}
 	// Int128Parts.Hi is signed: reinterpreting the two's-complement high word
 	// preserves negative values.
-	return xdr.Int128Parts{Hi: xdr.Int64(int64(hi)), Lo: xdr.Uint64(lo)}, nil
+	return xdr.Int128Parts{Hi: xdr.Int64(int64(hi)), Lo: xdr.Uint64(lo)}, nil //nolint:gosec // G115: deliberate two's-complement reinterpretation of the high word
 }
 
 func (v Value) asUint256() (xdr.UInt256Parts, error) {
@@ -263,7 +263,7 @@ func (v Value) asInt256() (xdr.Int256Parts, error) {
 		return xdr.Int256Parts{}, err
 	}
 	return xdr.Int256Parts{
-		HiHi: xdr.Int64(int64(hiHi)),
+		HiHi: xdr.Int64(int64(hiHi)), //nolint:gosec // G115: deliberate two's-complement reinterpretation of the high word
 		HiLo: xdr.Uint64(hiLo),
 		LoHi: xdr.Uint64(loHi),
 		LoLo: xdr.Uint64(loLo),

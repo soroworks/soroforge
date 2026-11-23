@@ -49,6 +49,7 @@ Endpoints:
   POST /v1/deploy            (?async=true for a job)
   POST /v1/upgrade           (?async=true for a job)
   GET  /v1/jobs/{id}
+  GET  /v1/networks
   GET  /v1/contracts?network=<name>
   GET  /v1/contracts/{network}/{alias}/history
   GET  /v1/contracts/{network}/{alias}/status

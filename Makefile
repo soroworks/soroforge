@@ -8,6 +8,10 @@ BIN_DIR     := bin
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS     := -s -w -X main.version=$(VERSION)
 
+# golangci-lint version. Keep in sync with the lint job in .github/workflows/ci.yml.
+GOLANGCI_LINT_VERSION := v2.14.0
+GOLANGCI_LINT         := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
 # Matches the docker-compose service; override for another database.
 DATABASE_URL ?= postgres://soroforge:soroforge@localhost:5432/soroforge?sslmode=disable
 
@@ -66,10 +70,8 @@ vet: ## Run go vet
 	go vet ./...
 
 .PHONY: lint
-lint: ## Run golangci-lint if it is installed
-	@command -v golangci-lint >/dev/null 2>&1 \
-		&& golangci-lint run \
-		|| echo "golangci-lint not installed; see https://golangci-lint.run/welcome/install/"
+lint: ## Run golangci-lint at the version CI pins (.golangci.yml)
+	$(GOLANGCI_LINT) run ./...
 
 .PHONY: check
 check: fmt vet test ## Format, vet, and test — run before opening a PR

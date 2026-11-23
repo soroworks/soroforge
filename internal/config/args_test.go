@@ -745,6 +745,65 @@ func TestArgsToJSONEmpty(t *testing.T) {
 	assert.Empty(t, encoded)
 }
 
+func TestParseAddress(t *testing.T) {
+	account := keypair.MustRandom().Address()
+
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = byte(i)
+	}
+	contract, err := strkey.Encode(strkey.VersionByteContract, raw)
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		address  string
+		wantType xdr.ScAddressType
+		wantErr  string
+	}{
+		"account G address": {
+			address:  account,
+			wantType: xdr.ScAddressTypeScAddressTypeAccount,
+		},
+		"contract C address": {
+			address:  contract,
+			wantType: xdr.ScAddressTypeScAddressTypeContract,
+		},
+		"surrounding whitespace is trimmed": {
+			address:  "  " + account + "\n",
+			wantType: xdr.ScAddressTypeScAddressTypeAccount,
+		},
+		"empty input": {
+			wantErr: "expected a G... account or C... contract address",
+		},
+		"not an address": {
+			address: "not-an-address",
+			wantErr: "expected a G... account or C... contract address",
+		},
+		"truncated contract address": {
+			address: "CAAAA",
+			wantErr: "contract address",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			addr, err := ParseAddress(tc.address)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantType, addr.Type)
+			if tc.wantType == xdr.ScAddressTypeScAddressTypeAccount {
+				assert.NotNil(t, addr.AccountId)
+			} else {
+				assert.NotNil(t, addr.ContractId)
+			}
+		})
+	}
+}
+
 func TestParseSalt(t *testing.T) {
 	t.Run("valid 32 bytes", func(t *testing.T) {
 		salt, err := ParseSalt("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
