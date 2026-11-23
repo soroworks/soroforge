@@ -31,6 +31,19 @@ store.Store appends confirmed deployment history and updates current contract st
 SoroVault registration and webhooks run best-effort
 ```
 
+Example CLI invocation that exercises the full lifecycle:
+
+```bash
+soroforge deploy --config soroforge.yaml --wasm counter.wasm --network testnet
+```
+
+This command:
+1. Loads `soroforge.yaml` and validates the environment (`config.Load`)
+2. Resolves the contract ID and network from config (`deploy.Service`)
+3. Simulates, signs, submits, and waits for the deploy transaction (`stellar.Client`)
+4. Records the confirmed deployment in the store (`store.Store`)
+5. Optionally registers the contract with SoroVault and fires webhooks
+
 The CLI assembles these dependencies in `cmd/soroforge/root.go`; `serve` wires the same service into `internal/api`. `internal/deploy/service.go` provides the transaction and confirmation helpers, while `internal/deploy/deploy.go` orchestrates contract deployment and records it through `record` only after confirmation. Dry runs simulate transactions but submit and record nothing. Failed submissions are kept as attempts, separate from confirmed deployment history.
 
 ## Invariants to Preserve
@@ -39,3 +52,28 @@ The CLI assembles these dependencies in `cmd/soroforge/root.go`; `serve` wires t
 - Never log, persist, or print signing seeds or token values. Store only public signer addresses and redact credentials from URLs and errors.
 - Keep SQLite and Postgres migrations aligned in version, table, and column shape; retain matching reversible up/down migrations for each dialect.
 - Keep RPC SDK details inside `internal/stellar/` and lifecycle behavior inside `internal/deploy/` so CLI and API behavior remains shared.
+
+Example of invariant #2 (secret redaction) in practice:
+
+```go
+// internal/config/load.go - the seed is never included in error messages
+func parseSigner(seed string) (Signer, error) {
+    if err := validateSeed(seed); err != nil {
+        // GOOD: error does not contain the seed value
+        return nil, fmt.Errorf("invalid signer seed: %w", err)
+    }
+    // BAD: would leak the seed in logs
+    // return nil, fmt.Errorf("invalid signer seed %q: %w", seed, err)
+}
+```
+
+The corresponding test asserts that errors never echo the input:
+
+```go
+// internal/config/load_test.go
+func TestParseSignerErrorDoesNotEchoSeed(t *testing.T) {
+    _, err := parseSigner("SBADSEED123...")
+    require.Error(t, err)
+    assert.NotContains(t, err.Error(), "SBADSEED123")
+}
+```

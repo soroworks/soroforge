@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -498,6 +499,37 @@ func TestArgsToScValsEmpty(t *testing.T) {
 	vals, err := ArgsToScVals(nil)
 	require.NoError(t, err)
 	assert.Empty(t, vals)
+}
+
+// ExampleParseArgFlag shows how a `deploy --arg` flag becomes the same Arg a
+// config file would produce, and how a bad flag is rejected before any
+// transaction is built.
+func ExampleParseArgFlag() {
+	arg, err := ParseArgFlag("u32:7")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	val, err := arg.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(arg.Type, val.Type)
+
+	// The first colon splits type from value, so the value may contain more.
+	arg, _ = ParseArgFlag("string:https://example.org")
+	val, _ = arg.ToScVal()
+	fmt.Println(arg.Type, *val.Str)
+
+	// A flag with no type is rejected up front.
+	_, err = ParseArgFlag(":7")
+	fmt.Println(err != nil)
+
+	// Output:
+	// u32 ScValTypeScvU32
+	// string https://example.org
+	// true
 }
 
 func TestParseArgFlag(t *testing.T) {

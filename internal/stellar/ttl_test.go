@@ -62,6 +62,20 @@ func TestMaxEntryTTLReportsMissingConfig(t *testing.T) {
 	assert.ErrorContains(t, err, "state archival configuration")
 }
 
+func TestStateArchivalConfigKey(t *testing.T) {
+	// StateArchivalConfigKey returns a deterministic LedgerKey for the
+	// state archival configuration setting.
+	expected := xdr.LedgerKey{
+		Type: xdr.LedgerEntryTypeConfigSetting,
+		ConfigSetting: &xdr.LedgerKeyConfigSetting{
+			ConfigSettingId: xdr.ConfigSettingIdConfigSettingStateArchival,
+		},
+	}
+
+	got := StateArchivalConfigKey()
+	assert.Equal(t, expected, got)
+}
+
 func TestReadContractEntriesReportsLiveInstanceAndCode(t *testing.T) {
 	contractID := testContractID(t)
 	wasmHash := WasmHash([]byte("live bytecode"))

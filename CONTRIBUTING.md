@@ -18,6 +18,13 @@ make test
 `make test` requires neither a network nor a database. If it needs either,
 something has regressed — please report it.
 
+**Example:** After cloning the repo, build and run the unit tests:
+
+```bash
+make build
+make test
+```
+
 ### Dev container (optional)
 
 The repository ships a [dev container](.devcontainer/) with Go 1.26, Postgres
@@ -34,6 +41,13 @@ make test-integration
 the integration suite runs without any other setup. A local Go install and
 Docker compose still work exactly as described below — the dev container is a
 convenience, not a requirement.
+
+**Example:** Common dev container workflow — run checks and unit tests:
+
+```bash
+make check
+make test
+```
 
 For the full suite:
 
