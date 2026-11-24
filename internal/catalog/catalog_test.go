@@ -3,6 +3,7 @@ package catalog_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,14 @@ import (
 )
 
 const contractID = "CCLV77FYLRJMBGTILTKVIM76SI6JY56H7KTT47HE26UF4F265UYRDSR4"
+
+// A nil client uses DefaultTimeout; passing one lets a deploy reuse its own.
+func ExampleNewSoroVault() {
+	vault := catalog.NewSoroVault(nil)
+	var registrar catalog.Registrar = vault
+	fmt.Println(registrar == vault)
+	// Output: true
+}
 
 func TestRegister(t *testing.T) {
 	t.Parallel()
