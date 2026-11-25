@@ -76,6 +76,13 @@ internal/store/     Postgres history + embedded migrations
 internal/api/       chi HTTP handlers mirroring the CLI
 ```
 
+**Example: adding a new constructor argument type**
+
+1. Add a case to `Arg.ToScVal` in `internal/config/args.go`
+2. Add the type name to `SupportedArgTypes` in the same file
+3. Add a row to the table test in `internal/config/args_test.go`
+4. No other packages need to change — the new type works through the existing `Arg` plumbing
+
 Three interfaces are the seams the whole design rests on:
 
 | Interface | Production | Test double |
@@ -139,6 +146,18 @@ Add a numbered pair in `internal/store/migrations/`
 (`000002_thing.up.sql` and `000002_thing.down.sql`). They're embedded into the
 binary, so nothing else needs wiring. Write a real `down` — reversibility is
 tested.
+
+**Example: adding a new `status` command**
+
+```bash
+# 1. Create the command file
+touch cmd/soroforge/status.go
+
+# 2. Implement newStatusCmd() in cmd/soroforge/commands.go
+# 3. Register it in newRootCmd()
+# 4. Add the matching HTTP handler in internal/api/handlers.go
+# 5. Both call the same deploy.Service method
+```
 
 ## Deliberately out of scope
 
