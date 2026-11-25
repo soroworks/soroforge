@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +118,40 @@ func TestParseCORSOrigins(t *testing.T) {
 			})
 		}
 	})
+}
+
+// ExampleParseCORSOrigins shows how SOROFORGE_API_CORS_ORIGINS is read: exact
+// origins, trimmed and validated, with CORS staying off unless the variable is
+// set. A wildcard or a path is refused rather than silently configuring a
+// policy that never matches.
+func ExampleParseCORSOrigins() {
+	origins, err := ParseCORSOrigins("https://dash.example.com, https://ops.example.com,")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, origin := range origins {
+		fmt.Println(origin)
+	}
+
+	// Unset means no origins, so the API sends no CORS headers at all.
+	origins, err = ParseCORSOrigins("")
+	fmt.Println(len(origins), err)
+
+	// "*" would let any page drive an API that holds a signing key.
+	_, err = ParseCORSOrigins("*")
+	fmt.Println(strings.Contains(err.Error(), "must not contain"))
+
+	// Browsers compare origins exactly, so a trailing slash is a mistake.
+	_, err = ParseCORSOrigins("https://dash.example.com/")
+	fmt.Println(strings.Contains(err.Error(), "no path"))
+
+	// Output:
+	// https://dash.example.com
+	// https://ops.example.com
+	// 0 <nil>
+	// true
+	// true
 }
 
 func TestValidateCORSOrigin(t *testing.T) {

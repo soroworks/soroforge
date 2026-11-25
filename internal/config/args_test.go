@@ -626,6 +626,39 @@ func TestParseArgFlagRejectsBadInput(t *testing.T) {
 	}
 }
 
+// ExampleParseArgsJSON shows the `--args-file` form: a JSON array of typed
+// arguments decoded and validated in one step, including the nested vec and map
+// shapes a constructor can take.
+func ExampleParseArgsJSON() {
+	raw := []byte(`[
+		{"type": "u32", "value": 7},
+		{"type": "string", "value": "SoroForge"},
+		{"type": "vec", "value": [{"type": "bool", "value": true}]}
+	]`)
+
+	args, err := ParseArgsJSON(raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(len(args))
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// Every entry is validated before a command begins, and a failure names
+	// the offending index rather than leaving the reader to count entries.
+	_, err = ParseArgsJSON([]byte(`[{"type": "u32", "value": "seven"}]`))
+	fmt.Println(strings.HasPrefix(err.Error(), "arg[0]: "))
+
+	// Output:
+	// 3
+	// u32
+	// string
+	// vec
+	// true
+}
+
 func TestParseArgsJSONSupportsNestedForms(t *testing.T) {
 	// The JSON file form is where nested vec and map arguments are used, so it
 	// must accept exactly the shapes soroforge.yaml accepts.
@@ -865,6 +898,45 @@ func uint32Ptr(v uint32) *xdr.Uint32 {
 	return &x
 }
 
+// ExampleParseCLIArg shows the two forms a single command-line argument may
+// take: the compact type:value form, and the full YAML/JSON object form that
+// nested values need.
+func ExampleParseCLIArg() {
+	arg, err := ParseCLIArg("u32:7")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	val, err := arg.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s %d %s\n", arg.Type, *val.U32, val.Type)
+
+	// The full form carries a vec, which the compact form cannot express.
+	nested, err := ParseCLIArg("{type: vec, value: [{type: u32, value: 1}, {type: u32, value: 2}]}")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	nestedVal, err := nested.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s %d %s\n", nested.Type, len(**nestedVal.Vec), nestedVal.Type)
+
+	// A malformed argument is rejected here, before a transaction is built.
+	_, err = ParseCLIArg("u32:not_a_number")
+	fmt.Println(err != nil)
+
+	// Output:
+	// u32 7 ScValTypeScvU32
+	// vec 2 ScValTypeScvVec
+	// true
+}
+
 func TestParseCLIArg(t *testing.T) {
 	tests := []struct {
 		input   string
@@ -908,6 +980,30 @@ func TestParseCLIArg(t *testing.T) {
 		_, err = ParseCLIArg("invalidformat")
 		assert.Error(t, err)
 	})
+}
+
+// ExampleParseCLIArgs converts a whole argument list at once, which is what a
+// command's --arg flags become. A single bad entry is reported by position, so
+// a long command line stays debuggable.
+func ExampleParseCLIArgs() {
+	args, err := ParseCLIArgs([]string{"u32:7", "string:hello", "void"})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// The middle entry is the bad one.
+	_, err = ParseCLIArgs([]string{"u32:7", "nonsense", "void"})
+	fmt.Println(strings.HasPrefix(err.Error(), "arg[1]: "))
+
+	// Output:
+	// u32
+	// string
+	// void
+	// true
 }
 
 func TestParseCLIArgs(t *testing.T) {
