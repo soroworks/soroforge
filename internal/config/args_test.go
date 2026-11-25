@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1014,4 +1015,48 @@ func TestArgToScVal256BitUnquotedRejection(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "quoted strings in YAML")
 	}
+}
+
+// TestArgJSONRoundTrip verifies that Arg marshals to JSON and back without
+// data loss, including the Value field's custom JSON encoding (#383).
+func TestArgJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Arg{Type: ArgU32, Value: NewValue("7")}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	var got Arg
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original.Type, got.Type)
+	assert.Equal(t, original.ContractRef, got.ContractRef)
+	wantVal, err := original.ToScVal()
+	require.NoError(t, err)
+	gotVal, err := got.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantVal, gotVal)
+}
+
+// TestMapEntryJSONRoundTrip verifies that MapEntry marshals to JSON and back
+// without data loss (#384).
+func TestMapEntryJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := MapEntry{
+		Key:   Arg{Type: ArgSymbol, Value: NewValue("name")},
+		Value: Arg{Type: ArgString, Value: NewValue("SoroForge")},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	var got MapEntry
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original.Key.Type, got.Key.Type)
+	assert.Equal(t, original.Value.Type, got.Value.Type)
+	wantKey, err := original.Key.ToScVal()
+	require.NoError(t, err)
+	gotKey, err := got.Key.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantKey, gotKey)
+	wantVal, err := original.Value.ToScVal()
+	require.NoError(t, err)
+	gotVal, err := got.Value.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantVal, gotVal)
 }
