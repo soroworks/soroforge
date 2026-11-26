@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -194,6 +195,39 @@ func TestTypeJSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	var got Type
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestUnionCaseJSONRoundTrip verifies that UnionCase marshals to JSON and back
+// without data loss, including a non-empty Values slice (#381).
+func TestUnionCaseJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := UnionCase{
+		Name:   "Deposit",
+		Values: []Type{{Display: "Address"}, {Display: "u128"}},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got UnionCase
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestVersionJSONRoundTrip verifies that Version marshals to JSON and back
+// without data loss, including the time.Time field (#382).
+func TestVersionJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Version{
+		WasmHash:  "9c1e4f2a",
+		DecodedAt: time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC),
+		Current:   true,
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got Version
 	require.NoError(t, json.Unmarshal(data, &got))
 	assert.Equal(t, original, got)
 }

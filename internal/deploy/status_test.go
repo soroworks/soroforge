@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -504,4 +505,41 @@ contracts:
 	assert.Equal(t, deploy.StateDrift, status.State)
 	assert.Equal(t, "stellar_asset", status.ActualWasmHash)
 	assert.False(t, status.InSync())
+}
+
+func TestStatusResultJSONRoundTrip(t *testing.T) {
+	t.Run("fully populated status result", func(t *testing.T) {
+		original := deploy.StatusResult{
+			Alias:            "counter",
+			Network:          "testnet",
+			ContractID:       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			State:            deploy.StateDrift,
+			ExpectedWasmHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			ActualWasmHash:   "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+			Detail:           "counter is running bytecode outside SoroForge",
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.StatusResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
+
+	t.Run("omitted optional fields", func(t *testing.T) {
+		original := deploy.StatusResult{
+			Alias:   "counter",
+			Network: "testnet",
+			State:   deploy.StateUntracked,
+			Detail:  "counter is not tracked on testnet; SoroForge has no record of deploying it",
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.StatusResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
 }
