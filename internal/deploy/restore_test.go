@@ -2,7 +2,9 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/soroworks/soroforge/internal/deploy"
 	"github.com/soroworks/soroforge/internal/store"
@@ -172,4 +174,72 @@ func TestUpgradeRefusesAnArchivedContract(t *testing.T) {
 	assert.ErrorContains(t, err, "archived")
 	assert.ErrorContains(t, err, "soroforge restore")
 	assert.Zero(t, h.client.SendCount())
+}
+
+func TestRestoreResultJSONRoundTrip(t *testing.T) {
+	t.Run("populated result", func(t *testing.T) {
+		fee := int64(250)
+		original := deploy.RestoreResult{
+			Alias:            "counter",
+			Network:          "testnet",
+			ContractID:       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			WasmHash:         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			Deployer:         "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+			Entries:          []string{"instance", "code"},
+			NothingToRestore: false,
+			MinResourceFee:   12345,
+			TxHash:           "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+			Ledger:           123456,
+			DryRun:           true,
+			EnvelopeXDR:      "AAAAAgAAA...",
+			Deployment: &store.Deployment{
+				ID:              1,
+				Alias:           "counter",
+				Network:         "testnet",
+				ContractID:      "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+				WasmHash:        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Action:          store.ActionRestore,
+				DeployerPubkey:  "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+				Actor:           "cli",
+				TxHash:          "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+				Ledger:          123456,
+				ContractURL:     "https://stellar.expert/explorer/testnet/contract/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+				TxURL:           "https://stellar.expert/explorer/testnet/tx/abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+				GitCommit:       "abcdef1234567890",
+				Dirty:           false,
+				FeeCharged:      &fee,
+				Notes:           "paid overdue rent",
+				ConstructorArgs: "[]",
+				CIRunURL:        "https://github.com/soroworks/soroforge/actions/runs/1",
+				FnName:          "restore",
+				FnArgs:          "",
+				CreatedAt:       time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
+			},
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.RestoreResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
+
+	t.Run("nothing to restore", func(t *testing.T) {
+		original := deploy.RestoreResult{
+			Alias:            "counter",
+			Network:          "testnet",
+			ContractID:       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			WasmHash:         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			Deployer:         "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+			NothingToRestore: true,
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.RestoreResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
 }

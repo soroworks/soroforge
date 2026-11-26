@@ -543,3 +543,32 @@ func TestStatusResultJSONRoundTrip(t *testing.T) {
 		assert.Equal(t, original, decoded)
 	})
 }
+
+func TestStatusRequestJSONRoundTrip(t *testing.T) {
+	t.Run("with network", func(t *testing.T) {
+		original := deploy.StatusRequest{
+			Alias:   "counter",
+			Network: "testnet",
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.StatusRequest
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
+
+	t.Run("without network", func(t *testing.T) {
+		original := deploy.StatusRequest{
+			Alias: "counter",
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.StatusRequest
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
+}
