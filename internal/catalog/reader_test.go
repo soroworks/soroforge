@@ -2,15 +2,59 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const readerContractID = "CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE"
+
+// TestEnumJSONRoundTrip verifies that Enum marshals and unmarshals without data
+// loss, including a non-empty Cases slice (#370).
+func TestEnumJSONRoundTrip(t *testing.T) {
+	orig := Enum{
+		Name:  "Status",
+		Cases: []EnumCase{{Name: "Active", Value: 1}, {Name: "Inactive", Value: 2}},
+	}
+	data, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got Enum
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, orig, got)
+}
+
+// TestEnumCaseJSONRoundTrip verifies that EnumCase marshals and unmarshals
+// without data loss (#371).
+func TestEnumCaseJSONRoundTrip(t *testing.T) {
+	orig := EnumCase{Name: "NotFound", Value: 404}
+	data, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got EnumCase
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, orig, got)
+}
+
+// TestEventJSONRoundTrip verifies that Event marshals and unmarshals without
+// data loss, including a non-empty Params slice (#372).
+func TestEventJSONRoundTrip(t *testing.T) {
+	orig := Event{
+		Name: "transferred",
+		Params: []Param{
+			{Name: "from", Type: Type{Display: "Address"}},
+			{Name: "amount", Type: Type{Display: "i128"}},
+		},
+	}
+	data, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got Event
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, orig, got)
+}
 
 func TestSoroVaultVersions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +99,46 @@ func TestSoroVaultInterface(t *testing.T) {
 	require.Len(t, in.Events, 1)
 }
 
+func TestParamJSONRoundTrip(t *testing.T) {
+	orig := Param{Name: "amount", Type: Type{Display: "u128"}}
+	b, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got Param
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, orig, got)
+}
+
+func TestFunctionJSONRoundTrip(t *testing.T) {
+	orig := Function{
+		Name:    "transfer",
+		Inputs:  []Param{{Name: "from", Type: Type{Display: "Address"}}, {Name: "amount", Type: Type{Display: "u128"}}},
+		Outputs: []Type{{Display: "bool"}},
+	}
+	b, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got Function
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, orig, got)
+}
+
+func TestInterfaceJSONRoundTrip(t *testing.T) {
+	orig := Interface{
+		Functions: []Function{{Name: "increment", Inputs: []Param{{Name: "by", Type: Type{Display: "u32"}}}, Outputs: []Type{{Display: "u32"}}}},
+		Types: Types{
+			Structs:    []Struct{{Name: "Config", Fields: []Param{{Name: "admin", Type: Type{Display: "Address"}}}}},
+			Unions:     []Union{{Name: "Op", Cases: []UnionCase{{Name: "Add", Values: []Type{{Display: "u32"}}}}}},
+			Enums:      []Enum{{Name: "Status", Cases: []EnumCase{{Name: "Active", Value: 1}}}},
+			ErrorEnums: []Enum{{Name: "Error", Cases: []EnumCase{{Name: "Nope", Value: 1}}}},
+		},
+		Events: []Event{{Name: "bumped", Params: []Param{{Name: "by", Type: Type{Display: "u32"}}}}},
+	}
+	b, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got Interface
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, orig, got)
+}
+
 func TestSoroVaultReaderErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("wasm_hash") {
@@ -81,4 +165,89 @@ func TestSoroVaultReaderErrors(t *testing.T) {
 
 	_, err = sv.Versions(context.Background(), "http://127.0.0.1:1", readerContractID)
 	assert.ErrorContains(t, err, "sorovault:")
+}
+
+// TestStructJSONRoundTrip verifies that Struct marshals to JSON and back
+// without loss (#377).
+func TestStructJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Struct{
+		Name: "Config",
+		Fields: []Param{
+			{Name: "admin", Type: Type{Display: "Address"}},
+			{Name: "fee", Type: Type{Display: "u32"}},
+		},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got Struct
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestTypeJSONRoundTrip verifies that Type marshals to JSON and back
+// without loss (#378).
+func TestTypeJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Type{Display: "Map<Symbol, i128>"}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got Type
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestUnionCaseJSONRoundTrip verifies that UnionCase marshals to JSON and back
+// without data loss, including a non-empty Values slice (#381).
+func TestUnionCaseJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := UnionCase{
+		Name:   "Deposit",
+		Values: []Type{{Display: "Address"}, {Display: "u128"}},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got UnionCase
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestVersionJSONRoundTrip verifies that Version marshals to JSON and back
+// without data loss, including the time.Time field (#382).
+func TestVersionJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Version{
+		WasmHash:  "9c1e4f2a",
+		DecodedAt: time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC),
+		Current:   true,
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got Version
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
+}
+
+// TestUnionJSONRoundTrip verifies that Union marshals to JSON and back
+// without loss (#380).
+func TestUnionJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Union{
+		Name: "DataKey",
+		Cases: []UnionCase{
+			{Name: "Balance", Values: []Type{{Display: "Address"}, {Display: "u32"}}},
+			{Name: "Allowance", Values: []Type{{Display: "AllowanceDataKey"}}},
+			{Name: "Nonce", Values: []Type{}},
+		},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var got Union
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original, got)
 }

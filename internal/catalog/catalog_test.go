@@ -98,3 +98,18 @@ func TestRegisterUnreachable(t *testing.T) {
 	_, err := catalog.NewSoroVault(nil).Register(context.Background(), url, contractID)
 	assert.ErrorContains(t, err, "sorovault")
 }
+
+func TestResultJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	orig := catalog.Result{
+		URL:       "https://sorovault.example/api/contracts/CCLV77FYLRJMBGTILTKVIM76SI6JY56H7KTT47HE26UF4F265UYRDSR4",
+		Created:   true,
+		Changed:   false,
+		Functions: 5,
+	}
+	b, err := json.Marshal(orig)
+	require.NoError(t, err)
+	var got catalog.Result
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, orig, got)
+}
