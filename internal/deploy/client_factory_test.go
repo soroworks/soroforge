@@ -112,3 +112,16 @@ func TestDefaultClientFactoryRejectsInvalidRPCURLs(t *testing.T) {
 		})
 	}
 }
+
+func ExampleDefaultClientFactory() {
+	client, err := deploy.DefaultClientFactory("testnet", config.Network{
+		RPCURL:     "https://soroban-testnet.stellar.org",
+		Passphrase: testnetPassphrase,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(client.NetworkPassphrase())
+	// Output: Test SDF Network ; September 2015
+}
