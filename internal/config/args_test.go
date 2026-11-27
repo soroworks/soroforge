@@ -860,6 +860,50 @@ func TestArgsToJSONEmpty(t *testing.T) {
 	assert.Empty(t, encoded)
 }
 
+// ExampleParseAddress shows the two address forms a config accepts — a G...
+// account and a C... contract — each parsed into the ScAddress a Soroban
+// argument needs.
+func ExampleParseAddress() {
+	// Both addresses are encoded from the same 32 zero bytes so the example
+	// prints the same output on every run; any real keypair or deployed
+	// contract ID parses the same way.
+	raw := make([]byte, 32)
+	account, err := strkey.Encode(strkey.VersionByteAccountID, raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	contract, err := strkey.Encode(strkey.VersionByteContract, raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	for _, s := range []string{account, contract} {
+		addr, err := ParseAddress(s)
+		if err != nil {
+			fmt.Println("error:", err)
+			continue
+		}
+		fmt.Println(addr.Type)
+	}
+
+	// Surrounding whitespace is trimmed, so a value copied out of a YAML file
+	// or a terminal parses as-is.
+	addr, err := ParseAddress("  " + account + "\n")
+	fmt.Println(err == nil, addr.Type == xdr.ScAddressTypeScAddressTypeAccount)
+
+	// Anything else is rejected, naming the two accepted forms.
+	_, err = ParseAddress("not-an-address")
+	fmt.Println(err)
+
+	// Output:
+	// ScAddressTypeScAddressTypeAccount
+	// ScAddressTypeScAddressTypeContract
+	// true true
+	// address "not-an-address": expected a G... account or C... contract address
+}
+
 func TestParseAddress(t *testing.T) {
 	account := keypair.MustRandom().Address()
 
