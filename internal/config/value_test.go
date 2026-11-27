@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"strconv"
 	"testing"
@@ -251,4 +253,41 @@ func TestValueDecodeEdgeCases(t *testing.T) {
 			assert.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+// ExampleNewValue shows the constructor used when an Arg is built in Go rather
+// than decoded from YAML: the Value behaves exactly like one unmarshalled from
+// a config file.
+func ExampleNewValue() {
+	arg := Arg{Type: ArgU32, Value: NewValue(7)}
+	val, err := arg.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(*val.U32)
+
+	// NewValue keeps integers exact instead of routing them through float64,
+	// which is what makes a u64 at the top of its range safe to pass.
+	big := NewValue(uint64(math.MaxUint64))
+	var n uint64
+	if err := big.Decode(&n); err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(n)
+
+	// Recording a deployment marshals the same Value as JSON, in the numeric
+	// form the equivalent config file would have produced.
+	recorded, err := json.Marshal(Arg{Type: ArgU64, Value: big})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(string(recorded))
+
+	// Output:
+	// 7
+	// 18446744073709551615
+	// {"type":"u64","value":18446744073709551615}
 }
