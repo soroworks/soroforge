@@ -745,6 +745,55 @@ func TestParseArgsJSONRejectsBadInput(t *testing.T) {
 	}
 }
 
+// ExampleParseArgsFile shows the `deploy --args-file` form: a JSON file on disk
+// holding the same typed arguments an inline `--arg` would pass, including the
+// nested vec and map shapes only the file form can express. Parsing and
+// validation happen here, so a bad file is rejected before any transaction is
+// built.
+func ExampleParseArgsFile() {
+	dir, err := os.MkdirTemp("", "args-file-example")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	// The path is resolved against the working directory, because the operator
+	// named the file on the command line.
+	path := filepath.Join(dir, "args.json")
+	raw := []byte(`[
+		{"type": "u32", "value": 7},
+		{"type": "string", "value": "SoroForge"},
+		{"type": "vec", "value": [{"type": "bool", "value": true}]}
+	]`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	args, err := ParseArgsFile(path)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(len(args))
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// A missing file is reported with the path it was given, so the operator
+	// can see which file failed to read.
+	_, err = ParseArgsFile(filepath.Join(dir, "absent.json"))
+	fmt.Println(strings.HasPrefix(err.Error(), "read args file"))
+
+	// Output:
+	// 3
+	// u32
+	// string
+	// vec
+	// true
+}
+
 func TestParseArgsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "args.json")
 	require.NoError(t, os.WriteFile(path, []byte(`[{"type": "u32", "value": 7}]`), 0o600))
