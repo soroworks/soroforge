@@ -209,6 +209,15 @@ func TestValidateCORSOrigin(t *testing.T) {
 	}
 }
 
+func ExampleValidateCORSOrigin() {
+	fmt.Println(ValidateCORSOrigin("https://dash.example.com") == nil)
+	fmt.Println(ValidateCORSOrigin("*") != nil)
+
+	// Output:
+	// true
+	// true
+}
+
 func TestListenAddrDefaultsToLoopback(t *testing.T) {
 	// The process holds a signing key; exposing it beyond loopback should be a
 	// deliberate act, not a default.
