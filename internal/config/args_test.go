@@ -987,6 +987,18 @@ func TestParseSalt(t *testing.T) {
 	})
 }
 
+func ExampleParseSalt() {
+	salt, err := ParseSalt("0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%x\n", salt)
+
+	// Output:
+	// 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+}
+
 func uint32Ptr(v uint32) *xdr.Uint32 {
 	x := xdr.Uint32(v)
 	return &x
