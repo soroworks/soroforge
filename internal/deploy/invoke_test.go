@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/soroworks/soroforge/internal/deploy"
@@ -104,4 +105,55 @@ func TestInvokeContractMissingFunction(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "function name is required")
+}
+
+func TestInvokeRequestJSONRoundTrip(t *testing.T) {
+	tests := map[string]struct {
+		input deploy.InvokeRequest
+		want  deploy.InvokeRequest
+	}{
+		"populated": {
+			input: deploy.InvokeRequest{
+				Alias:     "counter",
+				Network:   "testnet",
+				Function:  "set_admin",
+				Args:      []string{"address:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "u32:10"},
+				Notes:     "rotate admin key",
+				DryRun:    true,
+				GitCommit: "abc1234",
+			},
+			want: deploy.InvokeRequest{
+				Alias:     "counter",
+				Network:   "testnet",
+				Function:  "set_admin",
+				Args:      []string{"address:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "u32:10"},
+				Notes:     "rotate admin key",
+				DryRun:    true,
+				GitCommit: "abc1234",
+			},
+		},
+		"zero value": {},
+		"actor is excluded from json": {
+			input: deploy.InvokeRequest{
+				Alias:    "counter",
+				Function: "pause",
+				Actor:    "api-token",
+			},
+			want: deploy.InvokeRequest{
+				Alias:    "counter",
+				Function: "pause",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(tc.input)
+			require.NoError(t, err)
+
+			var got deploy.InvokeRequest
+			require.NoError(t, json.Unmarshal(raw, &got))
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
