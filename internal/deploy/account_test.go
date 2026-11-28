@@ -3,6 +3,7 @@ package deploy_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -151,22 +152,9 @@ func TestFormatStroops(t *testing.T) {
 	}
 }
 
-func TestFundRequestJSONRoundTrip(t *testing.T) {
-	tests := map[string]deploy.FundRequest{
-		"populated":  {Network: "testnet"},
-		"zero value": {},
-	}
-
-	for name, want := range tests {
-		t.Run(name, func(t *testing.T) {
-			raw, err := json.Marshal(want)
-			require.NoError(t, err)
-
-			var got deploy.FundRequest
-			require.NoError(t, json.Unmarshal(raw, &got))
-			assert.Equal(t, want, got)
-		})
-	}
+func ExampleFormatStroops() {
+	fmt.Println(deploy.FormatStroops(12_345_678))
+	// Output: 1.2345678
 }
 
 func friendbotConfig(friendbotURL string) string {

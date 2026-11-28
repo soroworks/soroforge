@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/soroworks/soroforge/internal/deploy"
@@ -11,6 +12,56 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUploadRequestJSONRoundTrip(t *testing.T) {
+	want := deploy.UploadRequest{
+		Alias:   "counter",
+		Network: "testnet",
+		Notes:   "proposal candidate",
+		DryRun:  true,
+	}
+
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+
+	var got deploy.UploadRequest
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, want, got)
+}
+
+func TestUploadResultJSONRoundTrip(t *testing.T) {
+	want := deploy.UploadResult{
+		Alias:             "counter",
+		Network:           "testnet",
+		WasmHash:          "wasm-hash",
+		Deployer:          "GABC",
+		UploadTxHash:      "tx-hash",
+		Ledger:            123,
+		MinResourceFee:    456,
+		DryRun:            true,
+		UploadEnvelopeXDR: "envelope-xdr",
+		UploadSkipped:     true,
+		Deployment: &store.Deployment{
+			Alias:          "counter",
+			Network:        "testnet",
+			WasmHash:       "wasm-hash",
+			Action:         store.ActionUpload,
+			DeployerPubkey: "GABC",
+			Actor:          "api",
+			TxHash:         "tx-hash",
+			Ledger:         123,
+			Notes:          "proposal candidate",
+			CIRunURL:       "https://github.com/soroworks/soroforge/actions/runs/1",
+		},
+	}
+
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+
+	var got deploy.UploadResult
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, want, got)
+}
 
 // These tests exercise the governance flow that no other operation covers:
 // install bytecode first, let a separate party upgrade later. Nothing here

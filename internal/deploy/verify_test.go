@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -11,6 +12,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestVerifyRequestJSONRoundTrip(t *testing.T) {
+	want := deploy.VerifyRequest{
+		Alias:   "counter",
+		Network: "testnet",
+	}
+
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+
+	var got deploy.VerifyRequest
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, want, got)
+}
+
+func TestVerifyResultJSONRoundTrip(t *testing.T) {
+	want := deploy.VerifyResult{
+		Alias:         "counter",
+		Network:       "testnet",
+		ContractID:    "C123",
+		Outcome:       deploy.VerifyDiffers,
+		WasmPath:      "contracts/counter.wasm",
+		LocalWasmHash: "local-hash",
+		LiveWasmHash:  "live-hash",
+		Detail:        "the local build differs from the live contract",
+	}
+
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+
+	var got deploy.VerifyResult
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, want, got)
+}
 
 // trackCounter records counter on testnet so Verify has something to compare.
 func trackCounter(t *testing.T, h *harness) {

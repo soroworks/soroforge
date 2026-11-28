@@ -1,6 +1,7 @@
 package stellar
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stellar/go-stellar-sdk/keypair"
@@ -226,6 +227,20 @@ func TestStroopsToXLM(t *testing.T) {
 			assert.Equal(t, tc.want, StroopsToXLM(tc.stroops))
 		})
 	}
+}
+
+func ExampleBuild() {
+	kp := keypair.MustRandom()
+	tx, err := Build(BuildParams{
+		Source:    &txnbuild.SimpleAccount{AccountID: kp.Address(), Sequence: 1},
+		Operation: UploadWasmOp([]byte{0x00, 0x61, 0x73, 0x6d}, kp.Address()),
+		BaseFee:   txnbuild.MinBaseFee,
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(tx.SequenceNumber())
+	// Output: 2
 }
 
 func TestAssembledTransactionIsSignableAndEncodable(t *testing.T) {

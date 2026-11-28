@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -440,4 +441,98 @@ contracts:
 	_, err := h.svc.Upgrade(context.Background(), deploy.UpgradeRequest{Alias: "xlm"})
 	assert.ErrorContains(t, err, "cannot upgrade xlm")
 	assert.ErrorContains(t, err, "Stellar Asset Contracts cannot be upgraded")
+}
+
+func TestUpgradeResultJSONRoundTrip(t *testing.T) {
+	t.Run("fully populated upgrade result", func(t *testing.T) {
+		fee := int64(1000)
+		original := deploy.UpgradeResult{
+			Alias:            "counter",
+			Network:          "testnet",
+			ContractID:       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			ContractURL:      "https://stellar.expert/explorer/testnet/contract/CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			PreviousWasmHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			WasmHash:         "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+			Deployer:         "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+			UpgradeFunc:      "upgrade",
+			UploadTxHash:     "1111111111111111111111111111111111111111111111111111111111111111",
+			UpgradeTxHash:    "2222222222222222222222222222222222222222222222222222222222222222",
+			UploadTxURL:      "https://stellar.expert/explorer/testnet/tx/1111111111111111111111111111111111111111111111111111111111111111",
+			UpgradeTxURL:     "https://stellar.expert/explorer/testnet/tx/2222222222222222222222222222222222222222222222222222222222222222",
+			Ledger:           123456,
+			DryRun:           true,
+			EstimatedFees: &deploy.DryRunFees{
+				Upload:  &deploy.FeeEstimate{ResourceFeeStroops: 100, InclusionFeeStroops: 10, TotalStroops: 110, TotalXLM: "0.000011"},
+				Upgrade: &deploy.FeeEstimate{ResourceFeeStroops: 200, InclusionFeeStroops: 20, TotalStroops: 220, TotalXLM: "0.000022"},
+				Total:   deploy.FeeEstimate{ResourceFeeStroops: 300, InclusionFeeStroops: 30, TotalStroops: 330, TotalXLM: "0.000033"},
+			},
+			UploadEnvelopeXDR:  "AAAAAgAAA...",
+			UpgradeEnvelopeXDR: "BBBBBgBBB...",
+			UploadSkipped:      false,
+			Warnings:           []string{"compiler version mismatch"},
+			NoChange:           false,
+			Deployment: &store.Deployment{
+				ID:             1,
+				Alias:          "counter",
+				Network:        "testnet",
+				ContractID:     "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+				WasmHash:       "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+				Action:         store.ActionUpgrade,
+				DeployerPubkey: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+				Actor:          "cli",
+				TxHash:         "2222222222222222222222222222222222222222222222222222222222222222",
+				Ledger:         123456,
+				GitCommit:      "abcdef1234567890",
+				Dirty:          false,
+				FeeCharged:     &fee,
+				Notes:          "upgraded to v2",
+				CreatedAt:      time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
+			},
+			Catalog: &deploy.CatalogStatus{
+				Registry: "https://catalog.example.org",
+				OK:       true,
+			},
+			Extension: &deploy.ExtendResult{
+				Alias:           "counter",
+				Network:         "testnet",
+				ContractID:      "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+				WasmHash:        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+				Deployer:        "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+				ExtendedLedgers: 1000,
+				MaxEntryTTL:     2000,
+				Entries:         []string{"instance", "code"},
+			},
+			ExtensionError: "transient network error",
+			Webhooks: []deploy.WebhookStatus{
+				{URL: "https://webhook.example.org/hook", OK: true, Attempts: 1},
+			},
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.UpgradeResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
+
+	t.Run("minimal no-change upgrade result", func(t *testing.T) {
+		original := deploy.UpgradeResult{
+			Alias:            "counter",
+			Network:          "testnet",
+			ContractID:       "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+			PreviousWasmHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			WasmHash:         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			Deployer:         "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFDAGORAC3LMTRV2A2TVC",
+			UpgradeFunc:      "upgrade",
+			NoChange:         true,
+		}
+
+		encoded, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var decoded deploy.UpgradeResult
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, original, decoded)
+	})
 }
