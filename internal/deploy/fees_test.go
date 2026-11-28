@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/soroworks/soroforge/internal/deploy"
@@ -74,4 +75,27 @@ func TestRealDeployDoesNotReportEstimatedFees(t *testing.T) {
 	result, err := h.svc.Deploy(context.Background(), deploy.DeployRequest{Alias: "counter"})
 	require.NoError(t, err)
 	assert.Nil(t, result.EstimatedFees)
+}
+
+func TestFeeEstimateJSONRoundTrip(t *testing.T) {
+	tests := map[string]deploy.FeeEstimate{
+		"populated": {
+			InclusionFeeStroops: 100,
+			ResourceFeeStroops:  12_345,
+			TotalStroops:        12_445,
+			TotalXLM:            "0.0012445",
+		},
+		"zero value": {},
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(want)
+			require.NoError(t, err)
+
+			var got deploy.FeeEstimate
+			require.NoError(t, json.Unmarshal(raw, &got))
+			assert.Equal(t, want, got)
+		})
+	}
 }
