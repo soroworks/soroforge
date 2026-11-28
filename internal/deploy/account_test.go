@@ -151,6 +151,37 @@ func TestFormatStroops(t *testing.T) {
 	}
 }
 
+func TestFundResultJSONRoundTrip(t *testing.T) {
+	tests := map[string]deploy.FundResult{
+		"funded": {
+			Address:      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+			Network:      "testnet",
+			FriendbotURL: "https://friendbot.example.org",
+			Hash:         "friendbot-tx-hash",
+			Detail:       "funded GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF on testnet",
+		},
+		"already funded": {
+			Address:       "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+			Network:       "testnet",
+			FriendbotURL:  "https://friendbot.example.org",
+			AlreadyFunded: true,
+			Detail:        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF already has its starting balance on testnet",
+		},
+		"zero value": {},
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(want)
+			require.NoError(t, err)
+
+			var got deploy.FundResult
+			require.NoError(t, json.Unmarshal(raw, &got))
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
 func friendbotConfig(friendbotURL string) string {
 	return `
 version: 1
