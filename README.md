@@ -1,4 +1,4 @@
-# SoroForge
+#SoroForge
 
 [![CI](https://github.com/soroworks/soroforge/actions/workflows/ci.yml/badge.svg)](https://github.com/soroworks/soroforge/actions/workflows/ci.yml)
 [![Security](https://github.com/soroworks/soroforge/actions/workflows/security.yml/badge.svg)](https://github.com/soroworks/soroforge/actions/workflows/security.yml)
@@ -548,6 +548,12 @@ regardless of origin.
 ---
 
 ## CLI reference
+
+Example — deploy a contract and check its on-chain status:
+
+```sh
+soroforge deploy --network testnet --wasm target/wasm32-unknown-unknown/release/my_contract.wasm
+soroforge status --network testnet
 
 Global flags: `--config/-c`, `--network/-n`, `--log-level`, `--log-format`,
 `--json`. Output goes to stdout and logs to stderr, so `--json` output stays

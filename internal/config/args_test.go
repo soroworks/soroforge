@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -626,6 +627,39 @@ func TestParseArgFlagRejectsBadInput(t *testing.T) {
 	}
 }
 
+// ExampleParseArgsJSON shows the `--args-file` form: a JSON array of typed
+// arguments decoded and validated in one step, including the nested vec and map
+// shapes a constructor can take.
+func ExampleParseArgsJSON() {
+	raw := []byte(`[
+		{"type": "u32", "value": 7},
+		{"type": "string", "value": "SoroForge"},
+		{"type": "vec", "value": [{"type": "bool", "value": true}]}
+	]`)
+
+	args, err := ParseArgsJSON(raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(len(args))
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// Every entry is validated before a command begins, and a failure names
+	// the offending index rather than leaving the reader to count entries.
+	_, err = ParseArgsJSON([]byte(`[{"type": "u32", "value": "seven"}]`))
+	fmt.Println(strings.HasPrefix(err.Error(), "arg[0]: "))
+
+	// Output:
+	// 3
+	// u32
+	// string
+	// vec
+	// true
+}
+
 func TestParseArgsJSONSupportsNestedForms(t *testing.T) {
 	// The JSON file form is where nested vec and map arguments are used, so it
 	// must accept exactly the shapes soroforge.yaml accepts.
@@ -711,6 +745,55 @@ func TestParseArgsJSONRejectsBadInput(t *testing.T) {
 	}
 }
 
+// ExampleParseArgsFile shows the `deploy --args-file` form: a JSON file on disk
+// holding the same typed arguments an inline `--arg` would pass, including the
+// nested vec and map shapes only the file form can express. Parsing and
+// validation happen here, so a bad file is rejected before any transaction is
+// built.
+func ExampleParseArgsFile() {
+	dir, err := os.MkdirTemp("", "args-file-example")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	// The path is resolved against the working directory, because the operator
+	// named the file on the command line.
+	path := filepath.Join(dir, "args.json")
+	raw := []byte(`[
+		{"type": "u32", "value": 7},
+		{"type": "string", "value": "SoroForge"},
+		{"type": "vec", "value": [{"type": "bool", "value": true}]}
+	]`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	args, err := ParseArgsFile(path)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println(len(args))
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// A missing file is reported with the path it was given, so the operator
+	// can see which file failed to read.
+	_, err = ParseArgsFile(filepath.Join(dir, "absent.json"))
+	fmt.Println(strings.HasPrefix(err.Error(), "read args file"))
+
+	// Output:
+	// 3
+	// u32
+	// string
+	// vec
+	// true
+}
+
 func TestParseArgsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "args.json")
 	require.NoError(t, os.WriteFile(path, []byte(`[{"type": "u32", "value": 7}]`), 0o600))
@@ -775,6 +858,50 @@ func TestArgsToJSONEmpty(t *testing.T) {
 	encoded, err := ArgsToJSON(nil)
 	require.NoError(t, err)
 	assert.Empty(t, encoded)
+}
+
+// ExampleParseAddress shows the two address forms a config accepts — a G...
+// account and a C... contract — each parsed into the ScAddress a Soroban
+// argument needs.
+func ExampleParseAddress() {
+	// Both addresses are encoded from the same 32 zero bytes so the example
+	// prints the same output on every run; any real keypair or deployed
+	// contract ID parses the same way.
+	raw := make([]byte, 32)
+	account, err := strkey.Encode(strkey.VersionByteAccountID, raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	contract, err := strkey.Encode(strkey.VersionByteContract, raw)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	for _, s := range []string{account, contract} {
+		addr, err := ParseAddress(s)
+		if err != nil {
+			fmt.Println("error:", err)
+			continue
+		}
+		fmt.Println(addr.Type)
+	}
+
+	// Surrounding whitespace is trimmed, so a value copied out of a YAML file
+	// or a terminal parses as-is.
+	addr, err := ParseAddress("  " + account + "\n")
+	fmt.Println(err == nil, addr.Type == xdr.ScAddressTypeScAddressTypeAccount)
+
+	// Anything else is rejected, naming the two accepted forms.
+	_, err = ParseAddress("not-an-address")
+	fmt.Println(err)
+
+	// Output:
+	// ScAddressTypeScAddressTypeAccount
+	// ScAddressTypeScAddressTypeContract
+	// true true
+	// address "not-an-address": expected a G... account or C... contract address
 }
 
 func TestParseAddress(t *testing.T) {
@@ -865,6 +992,45 @@ func uint32Ptr(v uint32) *xdr.Uint32 {
 	return &x
 }
 
+// ExampleParseCLIArg shows the two forms a single command-line argument may
+// take: the compact type:value form, and the full YAML/JSON object form that
+// nested values need.
+func ExampleParseCLIArg() {
+	arg, err := ParseCLIArg("u32:7")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	val, err := arg.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s %d %s\n", arg.Type, *val.U32, val.Type)
+
+	// The full form carries a vec, which the compact form cannot express.
+	nested, err := ParseCLIArg("{type: vec, value: [{type: u32, value: 1}, {type: u32, value: 2}]}")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	nestedVal, err := nested.ToScVal()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s %d %s\n", nested.Type, len(**nestedVal.Vec), nestedVal.Type)
+
+	// A malformed argument is rejected here, before a transaction is built.
+	_, err = ParseCLIArg("u32:not_a_number")
+	fmt.Println(err != nil)
+
+	// Output:
+	// u32 7 ScValTypeScvU32
+	// vec 2 ScValTypeScvVec
+	// true
+}
+
 func TestParseCLIArg(t *testing.T) {
 	tests := []struct {
 		input   string
@@ -908,6 +1074,30 @@ func TestParseCLIArg(t *testing.T) {
 		_, err = ParseCLIArg("invalidformat")
 		assert.Error(t, err)
 	})
+}
+
+// ExampleParseCLIArgs converts a whole argument list at once, which is what a
+// command's --arg flags become. A single bad entry is reported by position, so
+// a long command line stays debuggable.
+func ExampleParseCLIArgs() {
+	args, err := ParseCLIArgs([]string{"u32:7", "string:hello", "void"})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, arg := range args {
+		fmt.Println(arg.Type)
+	}
+
+	// The middle entry is the bad one.
+	_, err = ParseCLIArgs([]string{"u32:7", "nonsense", "void"})
+	fmt.Println(strings.HasPrefix(err.Error(), "arg[1]: "))
+
+	// Output:
+	// u32
+	// string
+	// void
+	// true
 }
 
 func TestParseCLIArgs(t *testing.T) {
@@ -1014,4 +1204,48 @@ func TestArgToScVal256BitUnquotedRejection(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "quoted strings in YAML")
 	}
+}
+
+// TestArgJSONRoundTrip verifies that Arg marshals to JSON and back without
+// data loss, including the Value field's custom JSON encoding (#383).
+func TestArgJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := Arg{Type: ArgU32, Value: NewValue("7")}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	var got Arg
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original.Type, got.Type)
+	assert.Equal(t, original.ContractRef, got.ContractRef)
+	wantVal, err := original.ToScVal()
+	require.NoError(t, err)
+	gotVal, err := got.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantVal, gotVal)
+}
+
+// TestMapEntryJSONRoundTrip verifies that MapEntry marshals to JSON and back
+// without data loss (#384).
+func TestMapEntryJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	original := MapEntry{
+		Key:   Arg{Type: ArgSymbol, Value: NewValue("name")},
+		Value: Arg{Type: ArgString, Value: NewValue("SoroForge")},
+	}
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	var got MapEntry
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Equal(t, original.Key.Type, got.Key.Type)
+	assert.Equal(t, original.Value.Type, got.Value.Type)
+	wantKey, err := original.Key.ToScVal()
+	require.NoError(t, err)
+	gotKey, err := got.Key.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantKey, gotKey)
+	wantVal, err := original.Value.ToScVal()
+	require.NoError(t, err)
+	gotVal, err := got.Value.ToScVal()
+	require.NoError(t, err)
+	assert.Equal(t, wantVal, gotVal)
 }

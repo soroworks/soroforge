@@ -605,6 +605,42 @@ func TestMemoryStoreHistoryOrdersByIDWhenTimestampsTie(t *testing.T) {
 		[]string{history[0].WasmHash, history[1].WasmHash, history[2].WasmHash})
 }
 
+func TestMemoryStoreCountAttemptsBeforeEdgeCases(t *testing.T) {
+	cutoff := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		timestamps []time.Time
+		want       int
+	}{
+		{name: "empty store", timestamps: nil, want: 0},
+		{name: "at cutoff is not before", timestamps: []time.Time{cutoff}, want: 0},
+		{name: "only strictly earlier attempts count", timestamps: []time.Time{
+			cutoff.Add(-time.Nanosecond), cutoff, cutoff.Add(time.Nanosecond),
+		}, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := store.NewMemoryStore()
+			ctx := context.Background()
+			for _, createdAt := range tt.timestamps {
+				at := createdAt
+				s.SetClock(func() time.Time { return at })
+				_, err := s.RecordAttempt(ctx, store.Attempt{
+					Alias: "counter", Network: "testnet",
+					Action: store.ActionDeploy, Stage: store.AttemptSubmit,
+					Error: "simulated failure",
+				})
+				require.NoError(t, err)
+			}
+
+			got, err := s.CountAttemptsBefore(ctx, cutoff)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestActionValid(t *testing.T) {
 	assert.True(t, store.ActionDeploy.Valid())
 	assert.True(t, store.ActionUpgrade.Valid())

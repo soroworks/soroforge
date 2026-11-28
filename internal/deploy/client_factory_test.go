@@ -18,6 +18,20 @@ const (
 	mainnetPassphrase = "Public Global Stellar Network ; September 2015"
 )
 
+func ExampleDefaultClientFactory() {
+	client, err := deploy.DefaultClientFactory("testnet", config.Network{
+		RPCURL:     "https://soroban-testnet.stellar.org",
+		Passphrase: testnetPassphrase,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(client.NetworkPassphrase())
+	// Output: Test SDF Network ; September 2015
+}
+
 // TestDefaultClientFactoryWiresTheNetworkPassphrase pins config.Network's two
 // fields to stellar.RPCOptions' two fields. Swapping rpc_url and passphrase
 // would sign transactions for the wrong network, and nothing downstream

@@ -2,7 +2,9 @@ package readiness
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,36 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDependencyJSONRoundTrip(t *testing.T) {
+	original := Dependency{Name: RPCName("testnet"), OK: false, Error: "connection refused"}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded Dependency
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, original, decoded)
+}
+
+func TestStatusJSONRoundTrip(t *testing.T) {
+	original := Status{
+		Ready: false,
+		Dependencies: []Dependency{
+			{Name: DatabaseName, OK: true},
+			{Name: RPCName("mainnet"), OK: false, Error: "dial tcp: connection refused"},
+		},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded Status
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, original, decoded)
+}
 
 func twoNetworks() *config.Config {
 	return &config.Config{
@@ -234,6 +266,14 @@ func TestNewRequiresDependencies(t *testing.T) {
 		_, err := New(opts)
 		assert.ErrorContains(t, err, "client factory is required")
 	})
+}
+
+func ExampleRPCName() {
+	fmt.Println(RPCName("testnet"))
+	fmt.Println(RPCName("mainnet"))
+	// Output:
+	// rpc:testnet
+	// rpc:mainnet
 }
 
 func dependenciesByName(status Status) map[string]Dependency {
